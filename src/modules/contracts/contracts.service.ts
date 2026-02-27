@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class UcontractsService {
-  // TODO: implement contracts service methods
+export class ContractsService {
+  // TODO: implement suspend, reactivate, extend logic
 }

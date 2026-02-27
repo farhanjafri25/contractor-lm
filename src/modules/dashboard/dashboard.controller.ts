@@ -3,6 +3,6 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard)
-export class UdashboardController {
+export class DashboardController {
   // TODO: implement dashboard endpoints
 }

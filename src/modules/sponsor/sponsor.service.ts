@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class UsponsorService {
-  // TODO: implement sponsor service methods
+export class SponsorService {
+  // TODO: implement extension request and admin approval logic
 }

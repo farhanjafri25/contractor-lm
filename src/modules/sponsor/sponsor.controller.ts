@@ -3,6 +3,6 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @Controller('sponsor')
 @UseGuards(JwtAuthGuard)
-export class UsponsorController {
-  // TODO: implement sponsor endpoints
+export class SponsorController {
+  // TODO: implement sponsor action endpoints
 }

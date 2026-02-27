@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class UtenantsService {
-  // TODO: implement tenants service methods
+export class TenantsService {
+  // TODO: implement tenant profile and user management
 }

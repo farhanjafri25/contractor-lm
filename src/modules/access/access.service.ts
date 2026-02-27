@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class UaccessService {
-  // TODO: implement access service methods
+export class AccessService {
+  // TODO: implement per-app provisioning state queries
 }

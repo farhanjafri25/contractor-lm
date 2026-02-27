@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class UdashboardService {
-  // TODO: implement dashboard service methods
+export class DashboardService {
+  // TODO: implement security summary aggregations
 }

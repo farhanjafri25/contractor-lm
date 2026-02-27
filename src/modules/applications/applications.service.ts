@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class UapplicationsService {
-  // TODO: implement applications service methods
+export class ApplicationsService {
+  // TODO: implement global app catalog and tenant connections
 }

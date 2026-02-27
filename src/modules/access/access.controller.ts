@@ -3,6 +3,6 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @Controller('access')
 @UseGuards(JwtAuthGuard)
-export class UaccessController {
+export class Controller {
   // TODO: implement access endpoints
 }

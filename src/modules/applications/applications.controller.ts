@@ -3,6 +3,6 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @Controller('applications')
 @UseGuards(JwtAuthGuard)
-export class UapplicationsController {
+export class ApplicationsController {
   // TODO: implement applications endpoints
 }
