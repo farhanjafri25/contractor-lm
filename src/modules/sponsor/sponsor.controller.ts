@@ -1,0 +1,8 @@
+import { Controller, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+
+@Controller('sponsor')
+@UseGuards(JwtAuthGuard)
+export class UsponsorController {
+  // TODO: implement sponsor endpoints
+}
