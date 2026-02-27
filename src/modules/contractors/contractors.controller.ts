@@ -18,7 +18,8 @@ import { CreateContractorDto } from './dto/create-contractor.dto';
 import { UpdateContractorDto } from './dto/update-contractor.dto';
 import { ListContractorsDto } from './dto/list-contractors.dto';
 import { JwtAuthGuard, RolesGuard, Roles } from '../../common/guards/jwt-auth.guard';
-import { CurrentUser, RequestUser } from '../../common/decorators/current-user.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { RequestUser } from '../../common/types';
 import { IsObject, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 

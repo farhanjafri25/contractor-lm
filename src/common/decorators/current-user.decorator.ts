@@ -1,16 +1,11 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import type { RequestUser } from '../types';
 
-// Usage: @CurrentUser() user: RequestUser
-export interface RequestUser {
-    userId: string;
-    tenantId: string;
-    role: string;
-    email: string;
-}
+export type { RequestUser };
 
 export const CurrentUser = createParamDecorator(
-    (_data: unknown, ctx: ExecutionContext): RequestUser => {
+    (_data: unknown, ctx: ExecutionContext) => {
         const request = ctx.switchToHttp().getRequest();
-        return request.user;
+        return request.user as RequestUser;
     },
 );

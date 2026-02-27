@@ -3,18 +3,31 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bull';
 import { Model } from 'mongoose';
-import { Queue } from 'bull';
-import { ContractorContract, ContractorContractDocument, ContractStatus } from '../schemas/contractor-contract.schema';
-import { ContractorAccess, ContractorAccessDocument, ProvisioningStatus } from '../schemas/contractor-access.schema';
-import { LifecycleEvent, LifecycleEventDocument, EventType, ActorType } from '../schemas/lifecycle-event.schema';
+import type { Queue } from 'bull';
+import { ContractorContract } from '../schemas/contractor-contract.schema';
+import type { ContractorContractDocument } from '../schemas/contractor-contract.schema';
+import { ContractStatus } from '../schemas/contractor-contract.schema';
+import { ContractorAccess } from '../schemas/contractor-access.schema';
+import type { ContractorAccessDocument } from '../schemas/contractor-access.schema';
+import { ProvisioningStatus } from '../schemas/contractor-access.schema';
+import { LifecycleEvent } from '../schemas/lifecycle-event.schema';
+import type { LifecycleEventDocument } from '../schemas/lifecycle-event.schema';
+import { EventType, ActorType } from '../schemas/lifecycle-event.schema';
 
 @Injectable()
 export class ExpiryProcessor {
     constructor(
-        @InjectModel(ContractorContract.name) private contractModel: Model<ContractorContractDocument>,
-        @InjectModel(ContractorAccess.name) private accessModel: Model<ContractorAccessDocument>,
-        @InjectModel(LifecycleEvent.name) private eventModel: Model<LifecycleEventDocument>,
-        @InjectQueue('revocation') private revocationQueue: Queue,
+        @InjectModel(ContractorContract.name)
+        private contractModel: Model<ContractorContractDocument>,
+
+        @InjectModel(ContractorAccess.name)
+        private accessModel: Model<ContractorAccessDocument>,
+
+        @InjectModel(LifecycleEvent.name)
+        private eventModel: Model<LifecycleEventDocument>,
+
+        @InjectQueue('revocation')
+        private revocationQueue: Queue,
     ) { }
 
     /**
@@ -30,12 +43,10 @@ export class ExpiryProcessor {
         });
 
         for (const contract of expiredContracts) {
-            // Mark contract expired
             await this.contractModel.findByIdAndUpdate(contract._id, {
                 status: ContractStatus.EXPIRED,
             });
 
-            // Find all active access records for this contract
             const accessRecords = await this.accessModel.find({
                 contract_id: contract._id,
                 provisioning_status: ProvisioningStatus.ACTIVE,
@@ -52,10 +63,7 @@ export class ExpiryProcessor {
                         tenant_application_id: access.tenant_application_id.toString(),
                         external_account_id: access.external_account_id,
                     },
-                    {
-                        attempts: 3,
-                        backoff: { type: 'exponential', delay: 5000 },
-                    },
+                    { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
                 );
             }
 

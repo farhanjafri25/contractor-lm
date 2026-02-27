@@ -13,9 +13,9 @@ import { TenantUser, TenantUserSchema } from '../../schemas/tenant-user.schema';
         PassportModule.register({ defaultStrategy: 'jwt' }),
         JwtModule.registerAsync({
             inject: [ConfigService],
-            useFactory: (config: ConfigService) => ({
-                secret: config.get<string>('jwt.secret'),
-                signOptions: { expiresIn: config.get<string>('jwt.expiresIn') },
+            useFactory: (config: ConfigService): any => ({
+                secret: config.get<string>('jwt.secret') ?? '',
+                signOptions: { expiresIn: config.get<string>('jwt.expiresIn') ?? '1h' },
             }),
         }),
         MongooseModule.forFeature([{ name: TenantUser.name, schema: TenantUserSchema }]),

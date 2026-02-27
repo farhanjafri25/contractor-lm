@@ -4,7 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
-import { TenantUser, TenantUserDocument, UserStatus } from '../../schemas/tenant-user.schema';
+import { TenantUser, UserStatus } from '../../schemas/tenant-user.schema';
+import type { TenantUserDocument } from '../../schemas/tenant-user.schema';
 
 @Injectable()
 export class AuthService {
@@ -33,10 +34,10 @@ export class AuthService {
             role: user.role,
             email: user.email,
         };
-        const access_token = this.jwtService.sign(payload);
-        const refresh_token = this.jwtService.sign(payload, {
-            secret: this.configService.get<string>('jwt.refreshSecret'),
-            expiresIn: this.configService.get<string>('jwt.refreshExpiresIn'),
+        const access_token = this.jwtService.sign(payload as any);
+        const refresh_token = this.jwtService.sign(payload as any, {
+            secret: this.configService.get<string>('jwt.refreshSecret') ?? '',
+            expiresIn: (this.configService.get<string>('jwt.refreshExpiresIn') ?? '7d') as any,
         });
 
         // Update last_login_at

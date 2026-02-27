@@ -27,8 +27,8 @@ export class ContractorContract {
     @Prop({ type: Types.ObjectId, ref: 'Tenant', required: true })
     tenant_id: Types.ObjectId;
 
-    @Prop({ type: Types.ObjectId, ref: 'TenantUser', required: true })
-    sponsor_id: Types.ObjectId;
+    @Prop({ type: Types.ObjectId, ref: 'TenantUser', default: null })
+    sponsor_id: Types.ObjectId | null;
 
     @Prop({ required: true })
     start_date: Date;

@@ -15,10 +15,9 @@ import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-ev
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
         ]),
         BullModule.registerQueue({ name: 'revocation' }),
-        BullModule.registerQueue({ name: 'provisioning' }),
     ],
     controllers: [ContractsController],
     providers: [ContractsService],
-    exports: [ContractsService],
+    exports: [ContractsService], // exported so SponsorModule can inject it
 })
 export class ContractsModule { }
