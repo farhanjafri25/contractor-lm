@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { TenantUser, UserStatus } from '../../schemas/tenant-user.schema';
 import type { TenantUserDocument } from '../../schemas/tenant-user.schema';
@@ -18,7 +18,7 @@ export class AuthService {
     async validateUser(email: string, password: string, tenantId: string) {
         const user = await this.userModel.findOne({
             email: email.toLowerCase(),
-            tenant_id: tenantId,
+            tenant_id: new Types.ObjectId(tenantId),
             status: UserStatus.ACTIVE,
         });
         if (!user || !user.password_hash) throw new UnauthorizedException('Invalid credentials');
