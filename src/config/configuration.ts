@@ -7,7 +7,8 @@ export default () => ({
   },
 
   redis: {
-    host: process.env.REDIS_HOST ?? 'localhost',
+    url: process.env.REDIS_URL ?? '',           // preferred: full URL e.g. rediss://... (Upstash)
+    host: process.env.REDIS_HOST ?? 'localhost', // fallback for local dev
     port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
   },
 

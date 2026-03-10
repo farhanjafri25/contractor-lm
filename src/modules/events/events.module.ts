@@ -12,6 +12,6 @@ import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-ev
     ],
     controllers: [EventsController],
     providers: [EventsService],
-    exports: [EventsService],
+    exports: [EventsService], // shared with other modules that need to query events
 })
 export class EventsModule { }

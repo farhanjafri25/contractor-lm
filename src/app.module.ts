@@ -32,15 +32,34 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
       }),
     }),
 
-    // Redis / BullMQ
+    // Redis / BullMQ — supports Upstash (rediss://) and local Redis (redis://)
     BullModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        redis: {
-          host: config.get<string>('redis.host'),
-          port: config.get<number>('redis.port'),
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const redisUrl = config.get<string>('redis.url');
+
+        if (redisUrl) {
+          const url = new URL(redisUrl);
+          const isTls = url.protocol === 'rediss:';
+          return {
+            redis: {
+              host: url.hostname,
+              port: parseInt(url.port, 10) || (isTls ? 6380 : 6379),
+              password: url.password || undefined,
+              username: url.username || undefined,
+              ...(isTls ? { tls: {} } : {}),
+            },
+          };
+        }
+
+        // Fallback: bare host+port for local dev without REDIS_URL
+        return {
+          redis: {
+            host: config.get<string>('redis.host') ?? 'localhost',
+            port: config.get<number>('redis.port') ?? 6379,
+          },
+        };
+      },
     }),
 
     // Rate limiting
