@@ -21,6 +21,7 @@ export class AuthService {
             tenant_id: new Types.ObjectId(tenantId),
             status: UserStatus.ACTIVE,
         });
+        console.log(`User data ${user}`);
         if (!user || !user.password_hash) throw new UnauthorizedException('Invalid credentials');
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) throw new UnauthorizedException('Invalid credentials');
