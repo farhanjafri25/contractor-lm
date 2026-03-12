@@ -23,8 +23,8 @@ export class AuthService {
         });
         Logger.log(`User data ${user}`);
         if (!user || !user.password_hash) throw new UnauthorizedException('Invalid credentials');
-        // const valid = await bcrypt.compare(password, user.password_hash);
-        // if (!valid) throw new UnauthorizedException('Invalid credentials');
+        const valid = await bcrypt.compare(password, user.password_hash);
+        if (!valid) throw new UnauthorizedException('Invalid credentials');
         return user;
     }
 
