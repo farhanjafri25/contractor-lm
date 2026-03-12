@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -21,7 +21,7 @@ export class AuthService {
             tenant_id: new Types.ObjectId(tenantId),
             status: UserStatus.ACTIVE,
         });
-        console.log(`User data ${user}`);
+        Logger.log(`User data ${user}`);
         if (!user || !user.password_hash) throw new UnauthorizedException('Invalid credentials');
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) throw new UnauthorizedException('Invalid credentials');
