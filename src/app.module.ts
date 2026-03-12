@@ -15,6 +15,9 @@ import { SponsorModule } from './modules/sponsor/sponsor.module';
 import { EventsModule } from './modules/events/events.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+
 @Module({
   imports: [
     // Config — available globally
@@ -76,5 +79,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     EventsModule,
     DashboardModule,
   ],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule { }
