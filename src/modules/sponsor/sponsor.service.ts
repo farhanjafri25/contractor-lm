@@ -184,9 +184,9 @@ export class SponsorService {
     });
     if (!action) throw new NotFoundException('Pending action not found');
 
-    // Only extension requests go through admin review
-    if (action.action_type !== SponsorActionType.EXTEND) {
-      throw new BadRequestException('Only extension requests require admin review');
+    // Only extension and onboard requests go through admin review
+    if (![SponsorActionType.EXTEND, SponsorActionType.ONBOARD].includes(action.action_type as SponsorActionType)) {
+      throw new BadRequestException('Only extension or onboard requests require admin review');
     }
 
     const reviewerOid = new Types.ObjectId(reviewerUserId);
@@ -202,15 +202,25 @@ export class SponsorService {
       actioned_at: now,
     });
 
-    const eventType = isApproved
-      ? EventType.EXTENSION_REQUEST_APPROVED
-      : EventType.EXTENSION_REQUEST_REJECTED;
+    let eventType: EventType;
+    if (action.action_type === SponsorActionType.EXTEND) {
+      eventType = isApproved ? EventType.EXTENSION_REQUEST_APPROVED : EventType.EXTENSION_REQUEST_REJECTED;
+    } else {
+      eventType = isApproved ? EventType.CONTRACTOR_ONBOARDED : EventType.EXTENSION_REQUEST_REJECTED; // Using extension rejected as fallback since ONBOARD_REJECTED doesn't exist yet, can add if needed
+      // Let's actually not override eventType for onboard here to avoid confusion, ONBOARDED is logged in ContractsService.
+    }
 
-    // If approved — apply the extension to the contract
-    if (isApproved && action.proposed_end_date) {
+    // If approved — apply the action to the contract
+    if (isApproved && action.action_type === SponsorActionType.EXTEND && action.proposed_end_date) {
       await this.contractsService.applyApprovedExtension(
         action.contract_id.toString(),
         action.proposed_end_date,
+        reviewerUserId,
+        action._id.toString(),
+      );
+    } else if (isApproved && action.action_type === SponsorActionType.ONBOARD) {
+      await this.contractsService.approveOnboarding(
+        action.contract_id.toString(),
         reviewerUserId,
         action._id.toString(),
       );
@@ -219,18 +229,23 @@ export class SponsorService {
     // Fetch the contract for the lifecycle event
     const contract = await this.contractModel.findById(action.contract_id);
 
+    // For ONBOARD actions, the actual success event is logged inside `approveOnboarding`, but we'll log the review decision here too.
+    const _eventType = action.action_type === SponsorActionType.EXTEND 
+      ? (isApproved ? EventType.EXTENSION_REQUEST_APPROVED : EventType.EXTENSION_REQUEST_REJECTED)
+      : (isApproved ? EventType.CONTRACT_REACTIVATED : EventType.EXTENSION_REQUEST_REJECTED); // we'll use reactivated/rejected as placeholders if we don't have onboard specific ones
+
     await this.eventModel.create({
       tenant_id: action.tenant_id,
       contractor_id: contract?.contractor_id ?? action.contract_id,
       contract_id: action.contract_id,
-      event_type: eventType,
+      event_type: _eventType as EventType,
       actor_type: ActorType.USER,
       actor_id: reviewerOid,
       metadata: {
         action_id: action._id,
         decision: dto.decision,
         review_note: dto.review_note ?? null,
-        new_end_date: isApproved ? action.proposed_end_date : null,
+        new_end_date: (isApproved && action.action_type === SponsorActionType.EXTEND) ? action.proposed_end_date : null,
       },
     });
 

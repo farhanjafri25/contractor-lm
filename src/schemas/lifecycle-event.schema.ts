@@ -28,6 +28,7 @@ export enum EventType {
     // Sponsor / Extension flow
     SPONSOR_REMINDER_SENT = 'sponsor.reminder_sent',
     SPONSOR_NO_RESPONSE = 'sponsor.no_response',
+    ONBOARDING_REQUESTED = 'onboarding.requested',
     EXTENSION_REQUEST_SUBMITTED = 'extension.request_submitted',
     EXTENSION_REQUEST_APPROVED = 'extension.request_approved',
     EXTENSION_REQUEST_REJECTED = 'extension.request_rejected',

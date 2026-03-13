@@ -53,7 +53,7 @@ export class ContractorsController {
   @Roles('admin', 'security', 'sponsor')
   @HttpCode(HttpStatus.CREATED)
   create(@CurrentUser() user: RequestUser, @Body() dto: CreateContractorDto) {
-    return this.contractorsService.create(dto, user.tenantId, user.userId);
+    return this.contractorsService.create(dto, user.tenantId, user.userId, user.role);
   }
 
   // POST /contractors/:id/contracts  (rehire)
@@ -70,6 +70,7 @@ export class ContractorsController {
       dto,
       user.tenantId,
       user.userId,
+      user.role,
     );
   }
 

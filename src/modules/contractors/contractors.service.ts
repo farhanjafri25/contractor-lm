@@ -31,6 +31,7 @@ import {
 import { CreateContractorDto } from './dto/create-contractor.dto';
 import { UpdateContractorDto } from './dto/update-contractor.dto';
 import { ListContractorsDto } from './dto/list-contractors.dto';
+import { SponsorAction, SponsorActionDocument, SponsorActionType, SponsorActionStatus } from '../../schemas/sponsor-action.schema';
 
 @Injectable()
 export class ContractorsService {
@@ -52,6 +53,9 @@ export class ContractorsService {
 
     @InjectQueue('import')
     private importQueue: Queue,
+
+    @InjectModel(SponsorAction.name)
+    private sponsorActionModel: Model<SponsorActionDocument>,
   ) { }
 
   // ─────────────────────────────────────────────────────────
@@ -126,7 +130,7 @@ export class ContractorsService {
   // ─────────────────────────────────────────────────────────
   // CREATE — POST /contractors
   // ─────────────────────────────────────────────────────────
-  async create(dto: CreateContractorDto, tenantId: string, userId: string) {
+  async create(dto: CreateContractorDto, tenantId: string, userId: string, userRole: string = 'admin') {
     const tenantOid = new Types.ObjectId(tenantId);
     const userOid = new Types.ObjectId(userId);
 
@@ -154,7 +158,7 @@ export class ContractorsService {
         );
       }
       // Auto-route to rehire if identity exists but no active contract
-      return this.createContractForExistingIdentity(existing._id.toString(), dto, tenantId, userId);
+      return this.createContractForExistingIdentity(existing._id.toString(), dto, tenantId, userId, userRole);
     }
 
     // 1. Create contractor identity
@@ -170,7 +174,10 @@ export class ContractorsService {
       created_by: userOid,
     });
 
-    // 2. Create contract
+    // 2. Create contract (depends on role)
+    const isSponsor = userRole === 'sponsor';
+    const initialStatus = isSponsor ? ContractStatus.PENDING : ContractStatus.ACTIVE;
+
     const contract = await this.contractModel.create({
       contractor_id: identity._id,
       tenant_id: tenantOid,
@@ -178,34 +185,52 @@ export class ContractorsService {
       start_date: startDate,
       end_date: endDate,
       original_end_date: endDate,
-      status: ContractStatus.ACTIVE,
+      status: initialStatus,
       create_google_account: dto.contract.create_google_account ?? false,
       extension_count: 0,
       is_rehire: false,
       created_by: userOid,
     });
 
-    // 3. Create access records and queue provisioning
+    // 3. Create access records (and queue provisioning ONLY IF active)
     const accessRecords = await this._createAccessAndQueueProvisioning(
       contract,
       dto.contract.application_access ?? [],
       tenantId,
       userId,
+      !isSponsor, // enqueue
     );
+
+    // If sponsor, create an ONBOARD action
+    if (isSponsor) {
+      const responseDeadline = new Date();
+      responseDeadline.setDate(responseDeadline.getDate() + 7); // Arbitrary deadline
+
+      await this.sponsorActionModel.create({
+        contract_id: contract._id,
+        tenant_id: tenantOid,
+        sponsor_id: userOid, // the caller
+        action_type: SponsorActionType.ONBOARD,
+        proposed_end_date: endDate,
+        justification: dto.notes ?? 'New contractor onboarding request',
+        status: SponsorActionStatus.PENDING,
+        response_deadline: responseDeadline,
+      });
+    }
 
     // 4. Log lifecycle event
     await this.eventModel.create({
       tenant_id: tenantOid,
       contractor_id: identity._id,
       contract_id: contract._id,
-      event_type: EventType.CONTRACTOR_CREATED,
-      actor_type: ActorType.USER,
+      event_type: isSponsor ? EventType.ONBOARDING_REQUESTED as any : EventType.CONTRACTOR_CREATED, // need to add to enum or use string cast
+      actor_type: isSponsor ? ActorType.SPONSOR : ActorType.USER,
       actor_id: userOid,
       metadata: {
         name: dto.name,
         email: dto.email,
         end_date: endDate,
-        apps_provisioned: accessRecords.length,
+        apps_provisioned: isSponsor ? 0 : accessRecords.length,
       },
     });
 
@@ -228,6 +253,7 @@ export class ContractorsService {
     dto: CreateContractorDto,
     tenantId: string,
     userId: string,
+    userRole: string = 'admin',
   ) {
     const tenantOid = new Types.ObjectId(tenantId);
     const userOid = new Types.ObjectId(userId);
@@ -259,6 +285,9 @@ export class ContractorsService {
       .findOne({ contractor_id: contractorOid })
       .sort({ created_at: -1 });
 
+    const isSponsor = userRole === 'sponsor';
+    const initialStatus = isSponsor ? ContractStatus.PENDING : ContractStatus.ACTIVE;
+
     const contract = await this.contractModel.create({
       contractor_id: contractorOid,
       tenant_id: tenantOid,
@@ -266,7 +295,7 @@ export class ContractorsService {
       start_date: startDate,
       end_date: endDate,
       original_end_date: endDate,
-      status: ContractStatus.ACTIVE,
+      status: initialStatus,
       create_google_account: dto.contract.create_google_account ?? false,
       extension_count: 0,
       is_rehire: true,
@@ -279,14 +308,31 @@ export class ContractorsService {
       dto.contract.application_access ?? [],
       tenantId,
       userId,
+      !isSponsor, // enqueue
     );
+
+    if (isSponsor) {
+      const responseDeadline = new Date();
+      responseDeadline.setDate(responseDeadline.getDate() + 7);
+
+      await this.sponsorActionModel.create({
+        contract_id: contract._id,
+        tenant_id: tenantOid,
+        sponsor_id: userOid,
+        action_type: SponsorActionType.ONBOARD,
+        proposed_end_date: endDate,
+        justification: dto.notes ?? 'Rehire onboarding request',
+        status: SponsorActionStatus.PENDING,
+        response_deadline: responseDeadline,
+      });
+    }
 
     await this.eventModel.create({
       tenant_id: tenantOid,
       contractor_id: contractorOid,
       contract_id: contract._id,
-      event_type: EventType.CONTRACTOR_ONBOARDED,
-      actor_type: ActorType.USER,
+      event_type: isSponsor ? EventType.ONBOARDING_REQUESTED as any : EventType.CONTRACTOR_ONBOARDED,
+      actor_type: isSponsor ? ActorType.SPONSOR : ActorType.USER,
       actor_id: userOid,
       metadata: { is_rehire: true, previous_contract_id: previousContract?._id },
     });
@@ -356,6 +402,7 @@ export class ContractorsService {
     }>,
     tenantId: string,
     userId: string,
+    enqueue: boolean = true,
   ) {
     if (!applicationAccess.length) return [];
 
@@ -373,22 +420,24 @@ export class ContractorsService {
 
     const accessRecords = await this.accessModel.insertMany(accessDocs);
 
-    // Queue a provisioning job for each access record
-    for (const access of accessRecords) {
-      await this.provisioningQueue.add(
-        'provision-access',
-        {
-          access_id: access._id.toString(),
-          contract_id: contract._id.toString(),
-          contractor_id: contract.contractor_id.toString(),
-          tenant_id: tenantId,
-          tenant_application_id: access.tenant_application_id.toString(),
-          external_account_id: access.external_account_id,
-          access_role: access.access_role,
-          create_google_account: contract.create_google_account,
-        },
-        { attempts: 3, backoff: { type: 'exponential', delay: 3000 } },
-      );
+    if (enqueue) {
+      // Queue a provisioning job for each access record
+      for (const access of accessRecords) {
+        await this.provisioningQueue.add(
+          'provision-access',
+          {
+            access_id: access._id.toString(),
+            contract_id: contract._id.toString(),
+            contractor_id: contract.contractor_id.toString(),
+            tenant_id: tenantId,
+            tenant_application_id: access.tenant_application_id.toString(),
+            external_account_id: access.external_account_id,
+            access_role: access.access_role,
+            create_google_account: contract.create_google_account,
+          },
+          { attempts: 3, backoff: { type: 'exponential', delay: 3000 } },
+        );
+      }
     }
 
     return accessRecords;

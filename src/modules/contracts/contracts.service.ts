@@ -41,6 +41,9 @@ export class ContractsService {
 
     @InjectQueue('revocation')
     private revocationQueue: Queue,
+
+    @InjectQueue('provisioning')
+    private provisioningQueue: Queue,
   ) { }
 
   // ─────────────────────────────────────────────────────────
@@ -291,6 +294,53 @@ export class ContractsService {
         previous_end_date: contract.end_date,
         new_end_date: newEndDate,
         via_sponsor_action: sponsorActionId,
+      },
+    });
+  }
+
+  /**
+   * Called by SponsorService after admin approves an ONBOARD request.
+   */
+  async approveOnboarding(contractId: string, approvedByUserId: string, sponsorActionId: string) {
+    const contract = await this.contractModel.findById(contractId);
+    if (!contract) throw new NotFoundException('Contract not found');
+
+    await this.contractModel.findByIdAndUpdate(contract._id, {
+      status: ContractStatus.ACTIVE,
+    });
+
+    const accessRecords = await this.accessModel.find({
+      contract_id: contract._id,
+      provisioning_status: ProvisioningStatus.PENDING,
+    });
+
+    for (const access of accessRecords) {
+      await this.provisioningQueue.add(
+        'provision-access',
+        {
+          access_id: access._id.toString(),
+          contract_id: contract._id.toString(),
+          contractor_id: contract.contractor_id.toString(),
+          tenant_id: contract.tenant_id.toString(),
+          tenant_application_id: access.tenant_application_id.toString(),
+          external_account_id: access.external_account_id,
+          access_role: access.access_role,
+          create_google_account: contract.create_google_account,
+        },
+        { attempts: 3, backoff: { type: 'exponential', delay: 3000 } },
+      );
+    }
+
+    await this.eventModel.create({
+      tenant_id: contract.tenant_id,
+      contractor_id: contract.contractor_id,
+      contract_id: contract._id,
+      event_type: EventType.CONTRACTOR_ONBOARDED,
+      actor_type: ActorType.USER,
+      actor_id: new Types.ObjectId(approvedByUserId),
+      metadata: {
+        via_sponsor_action: sponsorActionId,
+        apps_provisioned: accessRecords.length,
       },
     });
   }

@@ -4,6 +4,7 @@ import { Document, Types } from 'mongoose';
 export type SponsorActionDocument = SponsorAction & Document;
 
 export enum SponsorActionType {
+    ONBOARD = 'onboard',
     EXTEND = 'extend',
     TERMINATE = 'terminate',
     NO_RESPONSE = 'no_response',
@@ -33,8 +34,8 @@ export class SponsorAction {
     @Prop({ type: Date, default: null })
     proposed_end_date: Date | null;
 
-    @Prop({ type: String, required: true })
-    justification: string;
+    @Prop({ type: String, default: null })
+    justification: string | null;
 
     // Approval phase
     @Prop({ type: String, enum: SponsorActionStatus, default: SponsorActionStatus.PENDING })
