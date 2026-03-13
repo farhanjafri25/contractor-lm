@@ -64,7 +64,11 @@ export class SponsorService {
 
     const actions = await this.sponsorActionModel
       .find(filter)
-      .populate('contract_id', 'contractor_id start_date end_date status')
+      .populate({
+        path: 'contract_id',
+        select: 'contractor_id start_date end_date status',
+        populate: { path: 'contractor_id', select: 'name department email' }
+      })
       .populate('sponsor_id', 'email role')
       .populate('reviewed_by', 'email role')
       .sort({ createdAt: -1 })
@@ -79,7 +83,11 @@ export class SponsorService {
   async findOne(actionId: string, tenantId: string) {
     const action = await this.sponsorActionModel
       .findOne({ _id: new Types.ObjectId(actionId), tenant_id: new Types.ObjectId(tenantId) })
-      .populate('contract_id', 'contractor_id start_date end_date status')
+      .populate({
+        path: 'contract_id',
+        select: 'contractor_id start_date end_date status',
+        populate: { path: 'contractor_id', select: 'name department email' }
+      })
       .populate('sponsor_id', 'email role')
       .populate('reviewed_by', 'email role')
       .lean();
