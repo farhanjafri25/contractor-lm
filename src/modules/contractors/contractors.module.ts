@@ -7,6 +7,7 @@ import { ContractorIdentity, ContractorIdentitySchema } from '../../schemas/cont
 import { ContractorContract, ContractorContractSchema } from '../../schemas/contractor-contract.schema';
 import { ContractorAccess, ContractorAccessSchema } from '../../schemas/contractor-access.schema';
 import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-event.schema';
+import { SponsorAction, SponsorActionSchema } from '../../schemas/sponsor-action.schema';
 import { ImportProcessor } from '../../jobs/import.processor';
 
 @Module({
@@ -16,6 +17,7 @@ import { ImportProcessor } from '../../jobs/import.processor';
             { name: ContractorContract.name, schema: ContractorContractSchema },
             { name: ContractorAccess.name, schema: ContractorAccessSchema },
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
+            { name: SponsorAction.name, schema: SponsorActionSchema },
         ]),
         BullModule.registerQueue({ name: 'provisioning' }),
         BullModule.registerQueue({ name: 'import' }),
