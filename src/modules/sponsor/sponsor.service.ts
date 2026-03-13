@@ -105,9 +105,12 @@ export class SponsorService {
     });
     if (!contract) throw new NotFoundException('Active contract not found');
 
-    // Verify the caller is the assigned sponsor for this contract
-    if (contract.sponsor_id && contract.sponsor_id.toString() !== sponsorId) {
-      throw new ForbiddenException('Only the assigned sponsor can submit an action for this contract');
+    // Verify the caller is the assigned sponsor OR the creator of this contract
+    const isAssignedSponsor = contract.sponsor_id && contract.sponsor_id.toString() === sponsorId;
+    const isCreator = contract.created_by && contract.created_by.toString() === sponsorId;
+
+    if (!isAssignedSponsor && !isCreator) {
+      throw new ForbiddenException('Only the assigned sponsor or the creator can submit an action for this contract');
     }
 
     // Prevent duplicate pending requests
