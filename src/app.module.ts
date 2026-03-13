@@ -15,6 +15,7 @@ import { AccessModule } from './modules/access/access.module';
 import { SponsorModule } from './modules/sponsor/sponsor.module';
 import { EventsModule } from './modules/events/events.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { MailModule } from './modules/mail/mail.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -82,6 +83,7 @@ import { AppService } from './app.service';
     SponsorModule,
     EventsModule,
     DashboardModule,
+    MailModule,
   ],
   controllers: [AppController],
   providers: [AppService],

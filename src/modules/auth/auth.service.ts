@@ -4,25 +4,147 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
-import { TenantUser, UserStatus } from '../../schemas/tenant-user.schema';
+import { TenantUser, UserStatus, UserRole } from '../../schemas/tenant-user.schema';
 import type { TenantUserDocument } from '../../schemas/tenant-user.schema';
+import { OtpToken, OtpTokenDocument } from '../../schemas/otp.schema';
+import { Tenant, TenantDocument, TenantStatus, TenantPlan, BillingStatus } from '../../schemas/tenant.schema';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AuthService {
     constructor(
         @InjectModel(TenantUser.name) private userModel: Model<TenantUserDocument>,
+        @InjectModel(OtpToken.name) private otpModel: Model<OtpTokenDocument>,
+        @InjectModel(Tenant.name) private tenantModel: Model<TenantDocument>,
         private jwtService: JwtService,
         private configService: ConfigService,
+        private mailService: MailService,
     ) { }
 
-    async validateUser(email: string, password: string, tenantId: string) {
+    // ─────────────────────────────────────────────────────────
+    // SIGNUP — POST /auth/signup
+    // ─────────────────────────────────────────────────────────
+    async signup(email: string, name: string, passwordPlain: string) {
+        const emailLower = email.toLowerCase();
+        
+        // Check if user already exists
+        const existingUser = await this.userModel.findOne({ email: emailLower });
+        if (existingUser) {
+            throw new UnauthorizedException('An account with this email already exists');
+        }
+
+        // Generate 6 digit OTP
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpHash = await bcrypt.hash(otpCode, 10);
+        const passHash = await bcrypt.hash(passwordPlain, 10);
+
+        // Save/Update OTP token document
+        await this.otpModel.findOneAndUpdate(
+            { email: emailLower },
+            { name, password_hash: passHash, otp: otpHash, createdAt: new Date() },
+            { upsert: true, new: true }
+        );
+
+        // Send Email via Resend
+        await this.mailService.sendOtpEmail(emailLower, otpCode, name);
+
+        return { message: 'OTP sent successfully to your email' };
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // VERIFY OTP & AUTO-JOIN ORG — POST /auth/verify-otp
+    // ─────────────────────────────────────────────────────────
+    async verifyOtp(email: string, otpCode: string) {
+        const emailLower = email.toLowerCase();
+        
+        const tokenDoc = await this.otpModel.findOne({ email: emailLower });
+        if (!tokenDoc) {
+            throw new UnauthorizedException('OTP has expired or does not exist. Please request a new one.');
+        }
+
+        const validOtp = await bcrypt.compare(otpCode, tokenDoc.otp);
+        if (!validOtp) {
+            throw new UnauthorizedException('Invalid OTP code');
+        }
+
+        // OTP Validated! Discover domain.
+        const domain = emailLower.split('@')[1];
+        if (!domain) throw new UnauthorizedException('Invalid email format');
+
+        // Check if a Tenant exists for this domain
+        let tenant = await this.tenantModel.findOne({ 
+            $or: [
+                { email_domain: domain },
+                { domains: { $in: [domain] } }
+            ]
+        });
+
+        let newUser: TenantUserDocument;
+
+        if (tenant) {
+            // Organization exists! Auto-join as a Sponsor, put in Pending state
+            newUser = await this.userModel.create({
+                tenant_id: tenant._id,
+                email: emailLower,
+                password_hash: tokenDoc.password_hash,
+                role: UserRole.SPONSOR,
+                status: UserStatus.PENDING_APPROVAL,
+                is_invited: false,
+            });
+
+            await this.otpModel.deleteOne({ _id: tokenDoc._id });
+            return { 
+                status: 'pending_approval', 
+                message: 'You have joined the organization. An admin must approve your account before you can log in.',
+                tenant_name: tenant.name 
+            };
+        } else {
+            // New Organization! Create Workspace and make Admin
+            const workspaceName = domain.split('.')[0]; // e.g. "acme" from "acme.com"
+            const tenantName = workspaceName.charAt(0).toUpperCase() + workspaceName.slice(1) + ' Workspace';
+
+            tenant = await this.tenantModel.create({
+                name: tenantName,
+                email_domain: domain,
+                domains: [domain],
+                status: TenantStatus.TRIAL,
+                plan: TenantPlan.FREE,
+                billing_status: BillingStatus.TRIALING,
+            });
+
+            newUser = await this.userModel.create({
+                tenant_id: tenant._id,
+                email: emailLower,
+                password_hash: tokenDoc.password_hash,
+                role: UserRole.ADMIN,
+                status: UserStatus.ACTIVE,
+                is_invited: false,
+            });
+
+            await this.otpModel.deleteOne({ _id: tokenDoc._id });
+            
+            // Log them in immediately
+            return this.login(newUser);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // LOGIN — POST /auth/login
+    // ─────────────────────────────────────────────────────────
+    async validateUser(email: string, password: string) {
         const user = await this.userModel.findOne({
             email: email.toLowerCase(),
-            tenant_id: new Types.ObjectId(tenantId),
-            status: UserStatus.ACTIVE,
         });
-        Logger.log(`User data ${user}`);
+        
         if (!user || !user.password_hash) throw new UnauthorizedException('Invalid credentials');
+        
+        if (user.status === UserStatus.PENDING_APPROVAL) {
+            throw new UnauthorizedException('Account is pending admin approval');
+        }
+        if (user.status !== UserStatus.ACTIVE) {
+            throw new UnauthorizedException('Account is suspended or deactivated');
+        }
+
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) throw new UnauthorizedException('Invalid credentials');
         return user;

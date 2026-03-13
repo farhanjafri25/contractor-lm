@@ -27,7 +27,10 @@ export enum BillingStatus {
 @Schema({ timestamps: true, collection: 'tenants' })
 export class Tenant {
     @Prop({ required: true })
-    tenant_name: string;
+    name: string;
+
+    @Prop({ type: [String], default: [] })
+    domains: string[];
 
     @Prop({ required: true, unique: true, lowercase: true })
     email_domain: string;

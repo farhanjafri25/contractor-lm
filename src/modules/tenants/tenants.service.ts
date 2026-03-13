@@ -69,6 +69,20 @@ export class TenantsService {
     return { data: users, total: users.length };
   }
 
+  /** GET /tenants/me/users/pending — list pending users */
+  async listPendingUsers(tenantId: string) {
+    const users = await this.userModel
+      .find({
+        tenant_id: new Types.ObjectId(tenantId),
+        status: UserStatus.PENDING_APPROVAL,
+      })
+      .select('-password_hash')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return { data: users, total: users.length };
+  }
+
   /** GET /tenants/me/users/:id */
   async getUser(userId: string, tenantId: string) {
     const user = await this.userModel
@@ -193,6 +207,37 @@ export class TenantsService {
     });
 
     return { success: true, userId, status: UserStatus.ACTIVE };
+  }
+
+  /** POST /tenants/me/users/:id/approve — admin approves an auto-joined sponsor */
+  async approveUser(userId: string, tenantId: string) {
+    const user = await this._getUser(userId, tenantId);
+
+    if (user.status !== UserStatus.PENDING_APPROVAL) {
+      throw new BadRequestException('User is not pending approval');
+    }
+
+    await this._enforceUserSeatLimit(tenantId);
+
+    await this.userModel.findByIdAndUpdate(user._id, {
+      status: UserStatus.ACTIVE,
+    });
+
+    return { success: true, userId, status: UserStatus.ACTIVE };
+  }
+
+  /** POST /tenants/me/users/:id/reject — admin rejects an auto-joined sponsor */
+  async rejectUser(userId: string, tenantId: string) {
+    const user = await this._getUser(userId, tenantId);
+
+    if (user.status !== UserStatus.PENDING_APPROVAL) {
+      throw new BadRequestException('User is not pending approval');
+    }
+
+    // Delete the record so they can try signing up again if it was a mistake
+    await this.userModel.findByIdAndDelete(user._id);
+
+    return { success: true, userId, status: 'rejected_deleted' };
   }
 
   /**

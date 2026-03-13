@@ -55,6 +55,13 @@ export class TenantsController {
     return this.tenantsService.listUsers(user.tenantId, query);
   }
 
+  /** GET /tenants/me/pending-users (admin only) */
+  @Get('me/pending-users')
+  @Roles('admin', 'security')
+  listPendingUsers(@CurrentUser() user: RequestUser) {
+    return this.tenantsService.listPendingUsers(user.tenantId);
+  }
+
   /** GET /tenants/me/users/:id */
   @Get('me/users/:id')
   getUser(@CurrentUser() user: RequestUser, @Param('id') id: string) {
@@ -95,6 +102,22 @@ export class TenantsController {
   @HttpCode(HttpStatus.OK)
   reactivateUser(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.tenantsService.reactivateUser(id, user.tenantId);
+  }
+
+  /** POST /tenants/me/users/:id/approve (admin only) */
+  @Post('me/users/:id/approve')
+  @Roles('admin')
+  @HttpCode(HttpStatus.OK)
+  approveUser(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+    return this.tenantsService.approveUser(id, user.tenantId);
+  }
+
+  /** POST /tenants/me/users/:id/reject (admin only) */
+  @Post('me/users/:id/reject')
+  @Roles('admin')
+  @HttpCode(HttpStatus.OK)
+  rejectUser(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+    return this.tenantsService.rejectUser(id, user.tenantId);
   }
 
   /** POST /tenants/me/users/:id/set-password (admin only) */

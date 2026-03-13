@@ -9,9 +9,26 @@ class LoginDto {
     @IsString()
     @MinLength(8)
     password: string;
+}
+
+class SignupDto {
+    @IsEmail()
+    email: string;
 
     @IsString()
-    tenant_id: string;
+    name: string;
+
+    @IsString()
+    @MinLength(8)
+    password: string;
+}
+
+class VerifyOtpDto {
+    @IsEmail()
+    email: string;
+
+    @IsString()
+    otp: string;
 }
 
 class RefreshDto {
@@ -26,8 +43,20 @@ export class AuthController {
     @Post('login')
     @HttpCode(HttpStatus.OK)
     async login(@Body() dto: LoginDto) {
-        const user = await this.authService.validateUser(dto.email, dto.password, dto.tenant_id);
+        const user = await this.authService.validateUser(dto.email, dto.password);
         return this.authService.login(user);
+    }
+
+    @Post('signup')
+    @HttpCode(HttpStatus.OK)
+    async signup(@Body() dto: SignupDto) {
+        return this.authService.signup(dto.email, dto.name, dto.password);
+    }
+
+    @Post('verify-otp')
+    @HttpCode(HttpStatus.OK)
+    async verifyOtp(@Body() dto: VerifyOtpDto) {
+        return this.authService.verifyOtp(dto.email, dto.otp);
     }
 
     @Post('refresh')

@@ -13,6 +13,7 @@ export enum UserRole {
 export enum UserStatus {
     ACTIVE = 'active',
     INVITED = 'invited',
+    PENDING_APPROVAL = 'pending_approval',
     SUSPENDED = 'suspended',
     DEACTIVATED = 'deactivated',
 }
