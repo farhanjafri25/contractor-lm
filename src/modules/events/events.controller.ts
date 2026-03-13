@@ -7,7 +7,7 @@ import type { RequestUser } from '../../common/types';
 
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'security', 'viewer')
+@Roles('admin', 'security', 'viewer', 'sponsor')
 export class EventsController {
   constructor(private readonly eventsService: EventsService) { }
 
