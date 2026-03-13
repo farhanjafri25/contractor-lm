@@ -92,10 +92,14 @@ export class ContractorsService {
 
     const contractMap = new Map(activeContracts.map((c) => [c.contractor_id.toString(), c]));
 
-    const data = identities.map((identity) => ({
-      ...identity,
-      active_contract: contractMap.get(identity._id.toString()) ?? null,
-    }));
+    const data = identities.map((identity) => {
+      const active = contractMap.get(identity._id.toString());
+      return {
+        ...identity,
+        sponsor_id: active?.sponsor_id ?? null,
+        contracts: active ? [active] : [],
+      };
+    });
 
     return { data, pagination: { total, page, limit } };
   }
