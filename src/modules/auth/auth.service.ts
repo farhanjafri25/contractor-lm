@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -30,7 +30,7 @@ export class AuthService {
         // Check if user already exists
         const existingUser = await this.userModel.findOne({ email: emailLower });
         if (existingUser) {
-            throw new UnauthorizedException('An account with this email already exists');
+            throw new ConflictException('An account with this email already exists');
         }
 
         // Generate 6 digit OTP
@@ -59,17 +59,17 @@ export class AuthService {
         
         const tokenDoc = await this.otpModel.findOne({ email: emailLower });
         if (!tokenDoc) {
-            throw new UnauthorizedException('OTP has expired or does not exist. Please request a new one.');
+            throw new BadRequestException('OTP has expired or does not exist. Please request a new one.');
         }
 
         const validOtp = await bcrypt.compare(otpCode, tokenDoc.otp);
         if (!validOtp) {
-            throw new UnauthorizedException('Invalid OTP code');
+            throw new BadRequestException('Invalid OTP code');
         }
 
         // OTP Validated! Discover domain.
         const domain = emailLower.split('@')[1];
-        if (!domain) throw new UnauthorizedException('Invalid email format');
+        if (!domain) throw new BadRequestException('Invalid email format');
 
         // Check if a Tenant exists for this domain
         let tenant = await this.tenantModel.findOne({ 
