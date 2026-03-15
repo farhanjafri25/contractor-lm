@@ -52,6 +52,7 @@ import { AppService } from './app.service';
               port: parseInt(url.port, 10) || (isTls ? 6380 : 6379),
               password: url.password || undefined,
               username: url.username || undefined,
+              maxRetriesPerRequest: null,
               ...(isTls ? { tls: {} } : {}),
             },
             prefix: 'clm',
@@ -70,6 +71,7 @@ import { AppService } from './app.service';
           connection: {
             host: config.get<string>('redis.host') ?? 'localhost',
             port: config.get<number>('redis.port') ?? 6379,
+            maxRetriesPerRequest: null,
           },
           prefix: 'clm',
           defaultJobOptions: {

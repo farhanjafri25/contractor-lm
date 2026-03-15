@@ -24,9 +24,6 @@ import { ImportProcessor } from '../../jobs/import.processor';
             defaultJobOptions: {
                 removeOnComplete: true,
                 removeOnFail: false,
-            },
-            connection: {
-                maxRetriesPerRequest: null,
             }
         }),
         BullModule.registerQueue({ 
@@ -34,9 +31,6 @@ import { ImportProcessor } from '../../jobs/import.processor';
             defaultJobOptions: {
                 removeOnComplete: true,
                 removeOnFail: false,
-            },
-            connection: {
-                maxRetriesPerRequest: null,
             }
         }),
     ],

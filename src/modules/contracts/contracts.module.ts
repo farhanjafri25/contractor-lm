@@ -21,9 +21,6 @@ import { ExpiryProcessor } from '../../jobs/expiry.processor';
                 defaultJobOptions: {
                     removeOnComplete: true,
                     removeOnFail: false,
-                },
-                connection: {
-                    maxRetriesPerRequest: null,
                 }
             }, 
             { 
@@ -31,9 +28,6 @@ import { ExpiryProcessor } from '../../jobs/expiry.processor';
                 defaultJobOptions: {
                     removeOnComplete: true,
                     removeOnFail: false,
-                },
-                connection: {
-                    maxRetriesPerRequest: null,
                 }
             }
         ),

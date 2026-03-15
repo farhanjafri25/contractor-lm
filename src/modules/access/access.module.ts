@@ -20,9 +20,6 @@ import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-ev
                 defaultJobOptions: {
                     removeOnComplete: true,
                     removeOnFail: false,
-                },
-                connection: {
-                    maxRetriesPerRequest: null,
                 }
             },
             { 
@@ -30,9 +27,6 @@ import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-ev
                 defaultJobOptions: {
                     removeOnComplete: true,
                     removeOnFail: false,
-                },
-                connection: {
-                    maxRetriesPerRequest: null,
                 }
             },
         ),
