@@ -4,9 +4,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { InjectQueue } from '@nestjs/bull';
+import { InjectQueue } from '@nestjs/bullmq';
 import { Model, Types } from 'mongoose';
-import type { Queue } from 'bull';
+import { Queue } from 'bullmq';
 import { ContractorAccess } from '../../schemas/contractor-access.schema';
 import type { ContractorAccessDocument } from '../../schemas/contractor-access.schema';
 import { ProvisioningStatus } from '../../schemas/contractor-access.schema';

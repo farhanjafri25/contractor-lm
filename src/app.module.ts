@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { BullModule } from '@nestjs/bull';
+import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import configuration from './config/configuration';
@@ -47,7 +47,7 @@ import { AppService } from './app.service';
           const url = new URL(redisUrl);
           const isTls = url.protocol === 'rediss:';
           return {
-            redis: {
+            connection: {
               host: url.hostname,
               port: parseInt(url.port, 10) || (isTls ? 6380 : 6379),
               password: url.password || undefined,
@@ -55,30 +55,23 @@ import { AppService } from './app.service';
               ...(isTls ? { tls: {} } : {}),
             },
             prefix: 'clm',
-            settings: {
-              maxStalledCount: 1,
-              stalledInterval: 300000, // 5 minutes (default 30s)
-              guardInterval: 5000,     // 5 seconds
-              retryProcessDelay: 5000, // 5 seconds
-              backoffStrategies: {},
-              drainDelay: 10000,        // 5 seconds (delay before polling again if queue is drained)
+            defaultJobOptions: {
+              removeOnComplete: true,
+              removeOnFail: false,
             },
           };
         }
 
         // Fallback: bare host+port for local dev without REDIS_URL
         return {
-          redis: {
+          connection: {
             host: config.get<string>('redis.host') ?? 'localhost',
             port: config.get<number>('redis.port') ?? 6379,
           },
           prefix: 'clm',
-          settings: {
-            maxStalledCount: 1,
-            stalledInterval: 300000,
-            guardInterval: 5000,
-            retryProcessDelay: 5000,
-            drainDelay: 10000,
+          defaultJobOptions: {
+            removeOnComplete: true,
+            removeOnFail: false,
           },
         };
       },

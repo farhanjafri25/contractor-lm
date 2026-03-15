@@ -1,5 +1,5 @@
-import { Process, Processor } from '@nestjs/bull';
-import type { Job } from 'bull';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job } from 'bullmq';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as Papa from 'papaparse';
@@ -22,7 +22,7 @@ export interface ImportJob {
 const REQUIRED_FIELDS = ['name', 'email', 'end_date'];
 
 @Processor('import')
-export class ImportProcessor {
+export class ImportProcessor extends WorkerHost {
     constructor(
         @InjectModel(ContractorIdentity.name)
         private identityModel: Model<ContractorIdentityDocument>,
@@ -32,10 +32,11 @@ export class ImportProcessor {
 
         @InjectModel(LifecycleEvent.name)
         private eventModel: Model<LifecycleEventDocument>,
-    ) { }
+    ) { 
+        super();
+    }
 
-    @Process('process-csv')
-    async handleImport(job: Job<ImportJob>) {
+    async process(job: Job<ImportJob>) {
         const { csvData, fieldMapping, tenantId, userId } = job.data;
         const tenantOid = new Types.ObjectId(tenantId);
         const userOid = new Types.ObjectId(userId);

@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
-import { InjectQueue } from '@nestjs/bull';
+import { InjectQueue } from '@nestjs/bullmq';
 import { Model } from 'mongoose';
-import type { Queue } from 'bull';
+import { Queue } from 'bullmq';
 import { ContractorContract } from '../schemas/contractor-contract.schema';
 import type { ContractorContractDocument } from '../schemas/contractor-contract.schema';
 import { ContractStatus } from '../schemas/contractor-contract.schema';

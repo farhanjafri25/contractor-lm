@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { BullModule } from '@nestjs/bull';
+import { BullModule } from '@nestjs/bullmq';
 import { ContractorsController } from './contractors.controller';
 import { ContractorsService } from './contractors.service';
 import { ContractorIdentity, ContractorIdentitySchema } from '../../schemas/contractor-identity.schema';

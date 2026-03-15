@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { BullModule } from '@nestjs/bull';
+import { BullModule } from '@nestjs/bullmq';
 import { AccessController } from './access.controller';
 import { AccessService } from './access.service';
 import { ContractorAccess, ContractorAccessSchema } from '../../schemas/contractor-access.schema';

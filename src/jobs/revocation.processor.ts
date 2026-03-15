@@ -1,5 +1,5 @@
-import { Process, Processor } from '@nestjs/bull';
-import type { Job } from 'bull';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job } from 'bullmq';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ContractorAccess } from '../schemas/contractor-access.schema';
@@ -21,17 +21,18 @@ export interface RevocationJob {
 }
 
 @Processor('revocation')
-export class RevocationProcessor {
+export class RevocationProcessor extends WorkerHost {
     constructor(
         @InjectModel(ContractorAccess.name)
         private accessModel: Model<ContractorAccessDocument>,
 
         @InjectModel(LifecycleEvent.name)
         private eventModel: Model<LifecycleEventDocument>,
-    ) { }
+    ) {
+        super();
+    }
 
-    @Process('revoke-access')
-    async handleRevocation(job: Job<RevocationJob>) {
+    async process(job: Job<RevocationJob>) {
         const { access_id, contract_id, contractor_id, tenant_id, app_name } = job.data;
 
         try {
