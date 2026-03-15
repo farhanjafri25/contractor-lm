@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 
@@ -19,8 +19,31 @@ async function bootstrap() {
   );
 
   // CORS
+  let envOrigins: string[] = [];
+  if (process.env.FRONTEND_URL) {
+    try {
+      const parsed = JSON.parse(process.env.FRONTEND_URL);
+      envOrigins = Array.isArray(parsed) ? parsed : [process.env.FRONTEND_URL];
+    } catch {
+      envOrigins = [process.env.FRONTEND_URL];
+    }
+  }
+
+  const allowedOrigins = [
+    ...envOrigins,
+    'http://localhost:3001',
+    'http://localhost:3000',
+  ].filter(Boolean);
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, etc) or allowed origins
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new BadRequestException('not allowed'));
+      }
+    },
     credentials: true,
   });
 
