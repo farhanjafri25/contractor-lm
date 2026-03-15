@@ -54,11 +54,14 @@ import { AppService } from './app.service';
               username: url.username || undefined,
               ...(isTls ? { tls: {} } : {}),
             },
+            prefix: 'clm',
             settings: {
               maxStalledCount: 1,
               stalledInterval: 300000, // 5 minutes (default 30s)
               guardInterval: 5000,     // 5 seconds
               retryProcessDelay: 5000, // 5 seconds
+              backoffStrategies: {},
+              drainDelay: 10000,        // 5 seconds (delay before polling again if queue is drained)
             },
           };
         }
@@ -69,11 +72,13 @@ import { AppService } from './app.service';
             host: config.get<string>('redis.host') ?? 'localhost',
             port: config.get<number>('redis.port') ?? 6379,
           },
+          prefix: 'clm',
           settings: {
             maxStalledCount: 1,
             stalledInterval: 300000,
             guardInterval: 5000,
             retryProcessDelay: 5000,
+            drainDelay: 10000,
           },
         };
       },
