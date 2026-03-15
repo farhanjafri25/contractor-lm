@@ -20,7 +20,11 @@ export interface RevocationJob {
     app_name: string;
 }
 
-@Processor('revocation')
+@Processor('revocation', {
+    stalledInterval: 300000,
+    drainDelay: 300,
+    skipStalledCheck: true,
+})
 export class RevocationProcessor extends WorkerHost {
     constructor(
         @InjectModel(ContractorAccess.name)

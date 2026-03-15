@@ -21,7 +21,11 @@ export interface ImportJob {
 
 const REQUIRED_FIELDS = ['name', 'email', 'end_date'];
 
-@Processor('import')
+@Processor('import', {
+    stalledInterval: 300000,
+    drainDelay: 300,
+    skipStalledCheck: true,
+})
 export class ImportProcessor extends WorkerHost {
     constructor(
         @InjectModel(ContractorIdentity.name)
