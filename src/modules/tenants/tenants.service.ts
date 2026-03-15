@@ -8,6 +8,9 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import { MailService } from '../mail/mail.service';
+
 import { Tenant } from '../../schemas/tenant.schema';
 import type { TenantDocument } from '../../schemas/tenant.schema';
 import { TenantStatus } from '../../schemas/tenant.schema';
@@ -26,6 +29,8 @@ export class TenantsService {
 
     @InjectModel(TenantUser.name)
     private userModel: Model<TenantUserDocument>,
+
+    private mailService: MailService,
   ) { }
 
   // ─────────────────────────────────────────────────────────
@@ -119,6 +124,12 @@ export class TenantsService {
     // Enforce per-tenant user limit (admin + security + sponsor seats)
     await this._enforceUserSeatLimit(tenantId);
 
+    // Generate secure magic link token
+    const tokenPayload = crypto.randomBytes(32).toString('hex');
+    const tokenHash = await bcrypt.hash(tokenPayload, 10);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // Token valid for 7 days
+
     const user = await this.userModel.create({
       tenant_id: tenantOid,
       email: dto.email.toLowerCase(),
@@ -128,7 +139,15 @@ export class TenantsService {
       invited_by: invitedByOid,
       invited_at: new Date(),
       password_hash: null,
+      invite_token_hash: tokenHash,
+      invite_token_expires_at: expiresAt,
     });
+
+    const tenant = await this.tenantModel.findById(tenantOid);
+    const tenantName = tenant ? tenant.name : 'your workspace';
+    
+    // Send email asynchronously
+    this.mailService.sendInviteEmail(dto.email.toLowerCase(), tokenPayload, tenantName);
 
     return {
       ...user.toObject(),

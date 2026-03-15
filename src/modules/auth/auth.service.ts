@@ -181,4 +181,44 @@ export class AuthService {
         });
         return { access_token, expires_in: 3600 };
     }
+
+    // ─────────────────────────────────────────────────────────
+    // ACCEPT INVITE — POST /auth/accept-invite
+    // ─────────────────────────────────────────────────────────
+    async acceptInvite(email: string, token: string, newPasswordPlain: string) {
+        const user = await this.userModel.findOne({ email: email.toLowerCase() });
+        if (!user) {
+            throw new BadRequestException('Invalid invite link or user does not exist');
+        }
+
+        if (user.status !== UserStatus.INVITED || !user.is_invited) {
+            throw new BadRequestException('This account has already been registered or is not in an invited state.');
+        }
+
+        if (!user.invite_token_hash || !user.invite_token_expires_at) {
+            throw new BadRequestException('Invalid invite token');
+        }
+
+        if (new Date() > user.invite_token_expires_at) {
+            throw new BadRequestException('This invite link has expired. Please request a new one.');
+        }
+
+        const validToken = await bcrypt.compare(token, user.invite_token_hash);
+        if (!validToken) {
+            throw new BadRequestException('Invalid invite link');
+        }
+
+        // Token is valid! Hash new password and activate the user.
+        const passHash = await bcrypt.hash(newPasswordPlain, 10);
+        user.password_hash = passHash;
+        user.status = UserStatus.ACTIVE;
+        
+        // Destroy the token so it cannot be used again
+        user.invite_token_hash = null;
+        user.invite_token_expires_at = null;
+        await user.save();
+
+        // Automatically log them in
+        return this.login(user);
+    }
 }

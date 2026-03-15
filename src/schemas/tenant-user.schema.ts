@@ -45,6 +45,12 @@ export class TenantUser {
 
     @Prop({ type: Date, default: null })
     last_login_at: Date | null;
+
+    @Prop({ type: String, default: null })
+    invite_token_hash: string | null;
+
+    @Prop({ type: Date, default: null })
+    invite_token_expires_at: Date | null;
 }
 
 export const TenantUserSchema = SchemaFactory.createForClass(TenantUser);

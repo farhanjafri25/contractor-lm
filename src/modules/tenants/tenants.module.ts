@@ -5,12 +5,15 @@ import { TenantsService } from './tenants.service';
 import { Tenant, TenantSchema } from '../../schemas/tenant.schema';
 import { TenantUser, TenantUserSchema } from '../../schemas/tenant-user.schema';
 
+import { MailModule } from '../mail/mail.module';
+
 @Module({
     imports: [
         MongooseModule.forFeature([
             { name: Tenant.name, schema: TenantSchema },
             { name: TenantUser.name, schema: TenantUserSchema },
         ]),
+        MailModule,
     ],
     controllers: [TenantsController],
     providers: [TenantsService],
