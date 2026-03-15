@@ -19,8 +19,26 @@ import { ImportProcessor } from '../../jobs/import.processor';
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
             { name: SponsorAction.name, schema: SponsorActionSchema },
         ]),
-        BullModule.registerQueue({ name: 'provisioning' }),
-        BullModule.registerQueue({ name: 'import' }),
+        BullModule.registerQueue({ 
+            name: 'provisioning',
+            defaultJobOptions: {
+                removeOnComplete: true,
+                removeOnFail: false,
+            },
+            connection: {
+                maxRetriesPerRequest: null,
+            }
+        }),
+        BullModule.registerQueue({ 
+            name: 'import',
+            defaultJobOptions: {
+                removeOnComplete: true,
+                removeOnFail: false,
+            },
+            connection: {
+                maxRetriesPerRequest: null,
+            }
+        }),
     ],
     controllers: [ContractorsController],
     providers: [ContractorsService, ImportProcessor],

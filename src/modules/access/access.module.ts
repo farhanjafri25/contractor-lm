@@ -15,8 +15,26 @@ import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-ev
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
         ]),
         BullModule.registerQueue(
-            { name: 'revocation' },
-            { name: 'provisioning' },
+            { 
+                name: 'revocation',
+                defaultJobOptions: {
+                    removeOnComplete: true,
+                    removeOnFail: false,
+                },
+                connection: {
+                    maxRetriesPerRequest: null,
+                }
+            },
+            { 
+                name: 'provisioning',
+                defaultJobOptions: {
+                    removeOnComplete: true,
+                    removeOnFail: false,
+                },
+                connection: {
+                    maxRetriesPerRequest: null,
+                }
+            },
         ),
     ],
     controllers: [AccessController],

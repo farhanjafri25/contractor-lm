@@ -15,7 +15,28 @@ import { ExpiryProcessor } from '../../jobs/expiry.processor';
             { name: ContractorAccess.name, schema: ContractorAccessSchema },
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
         ]),
-        BullModule.registerQueue({ name: 'revocation' }, { name: 'provisioning' }),
+        BullModule.registerQueue(
+            { 
+                name: 'revocation',
+                defaultJobOptions: {
+                    removeOnComplete: true,
+                    removeOnFail: false,
+                },
+                connection: {
+                    maxRetriesPerRequest: null,
+                }
+            }, 
+            { 
+                name: 'provisioning',
+                defaultJobOptions: {
+                    removeOnComplete: true,
+                    removeOnFail: false,
+                },
+                connection: {
+                    maxRetriesPerRequest: null,
+                }
+            }
+        ),
     ],
     controllers: [ContractsController],
     providers: [ContractsService, ExpiryProcessor],

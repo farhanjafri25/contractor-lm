@@ -58,6 +58,9 @@ import { AppService } from './app.service';
             defaultJobOptions: {
               removeOnComplete: true,
               removeOnFail: false,
+              settings: {
+                backoffStrategy: () => 60000,
+              }
             },
           };
         }
@@ -72,6 +75,9 @@ import { AppService } from './app.service';
           defaultJobOptions: {
             removeOnComplete: true,
             removeOnFail: false,
+            settings: {
+              backoffStrategy: () => 60000,
+            }
           },
         };
       },
