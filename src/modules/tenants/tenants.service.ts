@@ -153,9 +153,9 @@ export class TenantsService {
 
     const user = await this._getUser(userId, tenantId);
 
-    // Prevent demoting the last admin
-    if (user.role === UserRole.ADMIN && dto.role !== UserRole.ADMIN) {
-      await this._ensureAdminRemainsAfterChange(tenantId, userId);
+    // Prevent demoting the last owner
+    if (user.role === UserRole.OWNER && dto.role !== UserRole.OWNER) {
+      await this._ensureOwnerRemainsAfterChange(tenantId, userId);
     }
 
     await this.userModel.findByIdAndUpdate(user._id, { role: dto.role });
@@ -177,9 +177,9 @@ export class TenantsService {
       throw new BadRequestException('User is already deactivated');
     }
 
-    // Prevent deactivating last admin
-    if (user.role === UserRole.ADMIN) {
-      await this._ensureAdminRemainsAfterChange(tenantId, userId);
+    // Prevent deactivating last owner
+    if (user.role === UserRole.OWNER) {
+      await this._ensureOwnerRemainsAfterChange(tenantId, userId);
     }
 
     await this.userModel.findByIdAndUpdate(user._id, {
@@ -209,7 +209,7 @@ export class TenantsService {
     return { success: true, userId, status: UserStatus.ACTIVE };
   }
 
-  /** POST /tenants/me/users/:id/approve — admin approves an auto-joined sponsor */
+  /** POST /tenants/me/users/:id/approve — owner approves an auto-joined sponsor */
   async approveUser(userId: string, tenantId: string) {
     const user = await this._getUser(userId, tenantId);
 
@@ -226,7 +226,7 @@ export class TenantsService {
     return { success: true, userId, status: UserStatus.ACTIVE };
   }
 
-  /** POST /tenants/me/users/:id/reject — admin rejects an auto-joined sponsor */
+  /** POST /tenants/me/users/:id/reject — owner rejects an auto-joined sponsor */
   async rejectUser(userId: string, tenantId: string) {
     const user = await this._getUser(userId, tenantId);
 
@@ -241,7 +241,7 @@ export class TenantsService {
   }
 
   /**
-   * POST /tenants/me/users/:id/set-password — admin sets password for a user
+   * POST /tenants/me/users/:id/set-password — owner sets password for a user
    * Typically used after the first invite flow or a password reset.
    */
   async setPassword(userId: string, tenantId: string, password: string) {
@@ -292,17 +292,17 @@ export class TenantsService {
     }
   }
 
-  private async _ensureAdminRemainsAfterChange(tenantId: string, excludeUserId: string) {
-    const otherAdmins = await this.userModel.countDocuments({
+  private async _ensureOwnerRemainsAfterChange(tenantId: string, excludeUserId: string) {
+    const otherOwners = await this.userModel.countDocuments({
       tenant_id: new Types.ObjectId(tenantId),
-      role: UserRole.ADMIN,
+      role: UserRole.OWNER,
       status: UserStatus.ACTIVE,
       _id: { $ne: new Types.ObjectId(excludeUserId) },
     });
 
-    if (otherAdmins === 0) {
+    if (otherOwners === 0) {
       throw new ForbiddenException(
-        'Cannot remove the last active admin. Promote another user to admin first.',
+        'Cannot remove the last active owner. Promote another user to owner first.',
       );
     }
   }

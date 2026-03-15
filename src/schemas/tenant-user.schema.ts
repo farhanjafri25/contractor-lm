@@ -4,10 +4,9 @@ import { Document, Types } from 'mongoose';
 export type TenantUserDocument = TenantUser & Document;
 
 export enum UserRole {
+    OWNER = 'owner',
     ADMIN = 'admin',
-    SECURITY = 'security',
     SPONSOR = 'sponsor',
-    VIEWER = 'viewer',
 }
 
 export enum UserStatus {

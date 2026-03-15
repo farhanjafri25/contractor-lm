@@ -22,7 +22,7 @@ export class SponsorController {
   constructor(private readonly sponsorService: SponsorService) { }
 
   // GET /sponsor/actions
-  // Admin/security sees all; sponsor sees only their own
+  // Owner/Admin sees all; sponsor sees only their own
   @Get()
   findAll(@CurrentUser() user: RequestUser, @Query() query: ListSponsorActionsDto) {
     const isSponsor = user.role === 'sponsor';
@@ -38,15 +38,15 @@ export class SponsorController {
 
   // POST /sponsor/actions  — sponsor submits extension or termination request
   @Post()
-  @Roles('admin', 'sponsor')
+  @Roles('owner', 'admin', 'sponsor')
   @HttpCode(HttpStatus.CREATED)
   submit(@CurrentUser() user: RequestUser, @Body() dto: CreateSponsorActionDto) {
     return this.sponsorService.submit(dto, user.tenantId, user.userId);
   }
 
-  // PATCH /sponsor/actions/:id/review  — admin approves or rejects
+  // PATCH /sponsor/actions/:id/review  — owner/admin approves or rejects
   @Patch(':id/review')
-  @Roles('admin', 'security')
+  @Roles('owner', 'admin')
   @HttpCode(HttpStatus.OK)
   review(
     @CurrentUser() user: RequestUser,

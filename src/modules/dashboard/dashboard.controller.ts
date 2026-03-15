@@ -7,7 +7,7 @@ import type { RequestUser } from '../../common/types';
 
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'security', 'viewer', 'sponsor')
+@Roles('owner', 'admin', 'sponsor')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) { }
 

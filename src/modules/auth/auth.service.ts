@@ -95,7 +95,7 @@ export class AuthService {
             await this.otpModel.deleteOne({ _id: tokenDoc._id });
             return { 
                 status: 'pending_approval', 
-                message: 'You have joined the organization. An admin must approve your account before you can log in.',
+                message: 'You have joined the organization. An owner or admin must approve your account before you can log in.',
                 tenant_name: tenant.name 
             };
         } else {
@@ -116,7 +116,7 @@ export class AuthService {
                 tenant_id: tenant._id,
                 email: emailLower,
                 password_hash: tokenDoc.password_hash,
-                role: UserRole.ADMIN,
+                role: UserRole.OWNER,
                 status: UserStatus.ACTIVE,
                 is_invited: false,
             });
@@ -139,7 +139,7 @@ export class AuthService {
         if (!user || !user.password_hash) throw new UnauthorizedException('Invalid credentials');
         
         if (user.status === UserStatus.PENDING_APPROVAL) {
-            throw new UnauthorizedException('Account is pending admin approval');
+            throw new UnauthorizedException('Account is pending owner/admin approval');
         }
         if (user.status !== UserStatus.ACTIVE) {
             throw new UnauthorizedException('Account is suspended or deactivated');

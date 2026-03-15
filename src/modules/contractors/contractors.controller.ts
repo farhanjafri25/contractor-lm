@@ -50,7 +50,7 @@ export class ContractorsController {
 
   // POST /contractors
   @Post()
-  @Roles('admin', 'security', 'sponsor')
+  @Roles('owner', 'admin', 'sponsor')
   @HttpCode(HttpStatus.CREATED)
   create(@CurrentUser() user: RequestUser, @Body() dto: CreateContractorDto) {
     return this.contractorsService.create(dto, user.tenantId, user.userId, user.role);
@@ -58,7 +58,7 @@ export class ContractorsController {
 
   // POST /contractors/:id/contracts  (rehire)
   @Post(':id/contracts')
-  @Roles('admin', 'security', 'sponsor')
+  @Roles('owner', 'admin', 'sponsor')
   @HttpCode(HttpStatus.CREATED)
   rehire(
     @CurrentUser() user: RequestUser,
@@ -76,7 +76,7 @@ export class ContractorsController {
 
   // PATCH /contractors/:id
   @Patch(':id')
-  @Roles('admin', 'security', 'sponsor')
+  @Roles('owner', 'admin', 'sponsor')
   update(
     @CurrentUser() user: RequestUser,
     @Param('id') id: string,
@@ -87,7 +87,7 @@ export class ContractorsController {
 
   // POST /contractors/import   (CSV bulk upload)
   @Post('import')
-  @Roles('admin', 'security')
+  @Roles('owner', 'admin')
   @HttpCode(HttpStatus.ACCEPTED)
   @UseInterceptors(FileInterceptor('file'))
   import(
