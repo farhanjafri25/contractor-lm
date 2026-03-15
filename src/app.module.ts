@@ -54,6 +54,12 @@ import { AppService } from './app.service';
               username: url.username || undefined,
               ...(isTls ? { tls: {} } : {}),
             },
+            settings: {
+              maxStalledCount: 1,
+              stalledInterval: 300000, // 5 minutes (default 30s)
+              guardInterval: 5000,     // 5 seconds
+              retryProcessDelay: 5000, // 5 seconds
+            },
           };
         }
 
@@ -62,6 +68,12 @@ import { AppService } from './app.service';
           redis: {
             host: config.get<string>('redis.host') ?? 'localhost',
             port: config.get<number>('redis.port') ?? 6379,
+          },
+          settings: {
+            maxStalledCount: 1,
+            stalledInterval: 300000,
+            guardInterval: 5000,
+            retryProcessDelay: 5000,
           },
         };
       },
