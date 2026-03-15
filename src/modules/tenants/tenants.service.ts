@@ -143,7 +143,7 @@ export class TenantsService {
       invite_token_expires_at: expiresAt,
     });
 
-    const tenant = await this.tenantModel.findById(tenantOid);
+    const tenant = await this.tenantModel.findById(tenantId);
     const tenantName = tenant ? tenant.name : 'your workspace';
     
     // Send email asynchronously
