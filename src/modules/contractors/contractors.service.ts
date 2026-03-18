@@ -79,11 +79,22 @@ export class ContractorsService {
       tenant_id: new Types.ObjectId(tenantId),
       status: { $in: [ContractStatus.ACTIVE, ContractStatus.EXTENDED, ContractStatus.SUSPENDED] },
     };
-    if (query.status) contractFilter.status = query.status;
-    if (query.sponsor_id) contractFilter.sponsor_id = new Types.ObjectId(query.sponsor_id);
+
+    // If there's a strict contract filter, pre-fetch valid contractor IDs
+    if (query.status || query.sponsor_id) {
+      if (query.status) contractFilter.status = query.status;
+      if (query.sponsor_id) contractFilter.sponsor_id = new Types.ObjectId(query.sponsor_id);
+
+      const matchingContracts = await this.contractModel
+        .find(contractFilter)
+        .select('contractor_id')
+        .lean();
+        
+      identityFilter._id = { $in: matchingContracts.map(c => c.contractor_id) };
+    }
 
     const [identities, total] = await Promise.all([
-      this.identityModel.find(identityFilter).skip(skip).limit(limit).lean(),
+      this.identityModel.find(identityFilter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       this.identityModel.countDocuments(identityFilter),
     ]);
 
@@ -91,6 +102,7 @@ export class ContractorsService {
     const contractorIds = identities.map((i) => i._id);
     const activeContracts = await this.contractModel
       .find({ ...contractFilter, contractor_id: { $in: contractorIds } })
+      .sort({ createdAt: -1 })
       .populate('sponsor_id', 'email role')
       .lean();
 
