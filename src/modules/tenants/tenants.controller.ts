@@ -11,7 +11,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
-import { UpdateTenantDto, InviteUserDto, ListUsersDto } from './dto/tenant.dto';
+import { UpdateTenantDto, InviteUserDto, ListUsersDto, UpdateUserProfileDto } from './dto/tenant.dto';
 import { JwtAuthGuard, RolesGuard, Roles } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { RequestUser } from '../../common/types';
@@ -46,8 +46,20 @@ export class TenantsController {
   }
 
   // ─────────────────────────────────────────────────────────
-  // USER MANAGEMENT
+  // USER MANAGEMENT & PROFILE
   // ─────────────────────────────────────────────────────────
+
+  /** GET /tenants/me/user (Get current logged-in user details) */
+  @Get('me/user')
+  getUserProfile(@CurrentUser() user: RequestUser) {
+    return this.tenantsService.getUserProfile(user.tenantId, user.userId);
+  }
+
+  /** PATCH /tenants/me/user (Update current user's personal profile) */
+  @Patch('me/user')
+  updateUserProfile(@CurrentUser() user: RequestUser, @Body() dto: UpdateUserProfileDto) {
+    return this.tenantsService.updateUserProfile(user.tenantId, user.userId, dto);
+  }
 
   /** GET /tenants/me/users */
   @Get('me/users')

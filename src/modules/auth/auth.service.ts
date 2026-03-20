@@ -86,6 +86,7 @@ export class AuthService {
             newUser = await this.userModel.create({
                 tenant_id: tenant._id,
                 email: emailLower,
+                name: tokenDoc.name,
                 password_hash: tokenDoc.password_hash,
                 role: UserRole.SPONSOR,
                 status: UserStatus.PENDING_APPROVAL,
@@ -115,6 +116,7 @@ export class AuthService {
             newUser = await this.userModel.create({
                 tenant_id: tenant._id,
                 email: emailLower,
+                name: tokenDoc.name,
                 password_hash: tokenDoc.password_hash,
                 role: UserRole.ADMIN,
                 status: UserStatus.ACTIVE,

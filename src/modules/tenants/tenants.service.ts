@@ -17,7 +17,7 @@ import { TenantStatus } from '../../schemas/tenant.schema';
 import { TenantUser } from '../../schemas/tenant-user.schema';
 import type { TenantUserDocument } from '../../schemas/tenant-user.schema';
 import { UserStatus, UserRole } from '../../schemas/tenant-user.schema';
-import { UpdateTenantDto, InviteUserDto, ListUsersDto } from './dto/tenant.dto';
+import { UpdateTenantDto, InviteUserDto, ListUsersDto, UpdateUserProfileDto } from './dto/tenant.dto';
 
 const BCRYPT_ROUNDS = 10;
 
@@ -155,6 +155,30 @@ export class TenantsService {
   }
 
 
+
+  /**
+   * GET /tenants/me/user — get personal profile
+   */
+  async getUserProfile(tenantId: string, userId: string) {
+    const user = await this._getUser(userId, tenantId);
+    return user;
+  }
+
+  /**
+   * PATCH /tenants/me/user — update personal profile
+   */
+  async updateUserProfile(tenantId: string, userId: string, dto: UpdateUserProfileDto) {
+    const user = await this._getUser(userId, tenantId);
+    
+    // Only update fields that are provided
+    const updateData: any = {};
+    if (dto.name !== undefined) updateData.name = dto.name;
+    if (dto.info !== undefined) updateData.info = dto.info;
+
+    await this.userModel.findByIdAndUpdate(user._id, updateData);
+    
+    return { ...user.toObject(), ...updateData };
+  }
 
   /**
    * POST /tenants/me/users/:id/deactivate — soft-delete a user

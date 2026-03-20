@@ -38,6 +38,16 @@ export class InviteUserDto {
     email: string;
 }
 
+export class UpdateUserProfileDto {
+    @IsOptional()
+    @IsString()
+    name?: string;
+
+    @IsOptional()
+    @IsString()
+    info?: string;
+}
+
 export class ListUsersDto {
     @IsOptional()
     @IsEnum(UserRole)
