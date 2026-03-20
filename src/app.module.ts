@@ -16,6 +16,7 @@ import { SponsorModule } from './modules/sponsor/sponsor.module';
 import { EventsModule } from './modules/events/events.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { MailModule } from './modules/mail/mail.module';
+import { AiModule } from './modules/ai/ai.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -102,6 +103,7 @@ import { AppService } from './app.service';
     EventsModule,
     DashboardModule,
     MailModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],

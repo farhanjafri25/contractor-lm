@@ -29,4 +29,9 @@ export default () => ({
   },
 
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3001',
+
+  mistral: {
+    apiKey: process.env.MISTRAL_API_KEY ?? '',
+    chatModel: process.env.MISTRAL_CHAT_MODEL ?? 'mistral-large-latest',
+  },
 });
