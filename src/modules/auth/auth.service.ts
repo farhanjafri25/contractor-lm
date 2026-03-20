@@ -116,7 +116,7 @@ export class AuthService {
                 tenant_id: tenant._id,
                 email: emailLower,
                 password_hash: tokenDoc.password_hash,
-                role: UserRole.OWNER,
+                role: UserRole.ADMIN,
                 status: UserStatus.ACTIVE,
                 is_invited: false,
             });

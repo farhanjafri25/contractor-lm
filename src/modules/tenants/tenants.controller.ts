@@ -11,7 +11,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
-import { UpdateTenantDto, InviteUserDto, UpdateUserRoleDto, ListUsersDto } from './dto/tenant.dto';
+import { UpdateTenantDto, InviteUserDto, ListUsersDto } from './dto/tenant.dto';
 import { JwtAuthGuard, RolesGuard, Roles } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { RequestUser } from '../../common/types';
@@ -38,9 +38,9 @@ export class TenantsController {
     return this.tenantsService.getStats(user.tenantId);
   }
 
-  /** PATCH /tenants/me — owner only */
+  /** PATCH /tenants/me — admin only */
   @Patch('me')
-  @Roles('owner')
+  @Roles('admin')
   updateProfile(@CurrentUser() user: RequestUser, @Body() dto: UpdateTenantDto) {
     return this.tenantsService.updateProfile(user.tenantId, dto);
   }
@@ -55,9 +55,9 @@ export class TenantsController {
     return this.tenantsService.listUsers(user.tenantId, query);
   }
 
-  /** GET /tenants/me/pending-users (owner only) */
+  /** GET /tenants/me/pending-users (admin only) */
   @Get('me/pending-users')
-  @Roles('owner')
+  @Roles('admin')
   listPendingUsers(@CurrentUser() user: RequestUser) {
     return this.tenantsService.listPendingUsers(user.tenantId);
   }
@@ -68,61 +68,51 @@ export class TenantsController {
     return this.tenantsService.getUser(id, user.tenantId);
   }
 
-  /** POST /tenants/me/users — invite a new user (owner only) */
+  /** POST /tenants/me/users — invite a new user (admin only) */
   @Post('me/users')
-  @Roles('owner')
+  @Roles('admin')
   @HttpCode(HttpStatus.CREATED)
   inviteUser(@CurrentUser() user: RequestUser, @Body() dto: InviteUserDto) {
     return this.tenantsService.inviteUser(dto, user.tenantId, user.userId);
   }
 
-  /** PATCH /tenants/me/users/:id/role — change role (owner only) */
-  @Patch('me/users/:id/role')
-  @Roles('owner')
-  @HttpCode(HttpStatus.OK)
-  updateUserRole(
-    @CurrentUser() user: RequestUser,
-    @Param('id') id: string,
-    @Body() dto: UpdateUserRoleDto,
-  ) {
-    return this.tenantsService.updateUserRole(id, user.tenantId, user.userId, dto);
-  }
 
-  /** POST /tenants/me/users/:id/deactivate (owner only) */
+
+  /** POST /tenants/me/users/:id/deactivate (admin only) */
   @Post('me/users/:id/deactivate')
-  @Roles('owner')
+  @Roles('admin')
   @HttpCode(HttpStatus.OK)
   deactivateUser(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.tenantsService.deactivateUser(id, user.tenantId, user.userId);
   }
 
-  /** POST /tenants/me/users/:id/reactivate (owner only) */
+  /** POST /tenants/me/users/:id/reactivate (admin only) */
   @Post('me/users/:id/reactivate')
-  @Roles('owner')
+  @Roles('admin')
   @HttpCode(HttpStatus.OK)
   reactivateUser(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.tenantsService.reactivateUser(id, user.tenantId);
   }
 
-  /** POST /tenants/me/users/:id/approve (owner only) */
+  /** POST /tenants/me/users/:id/approve (admin only) */
   @Post('me/users/:id/approve')
-  @Roles('owner')
+  @Roles('admin')
   @HttpCode(HttpStatus.OK)
   approveUser(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.tenantsService.approveUser(id, user.tenantId);
   }
 
-  /** POST /tenants/me/users/:id/reject (owner only) */
+  /** POST /tenants/me/users/:id/reject (admin only) */
   @Post('me/users/:id/reject')
-  @Roles('owner')
+  @Roles('admin')
   @HttpCode(HttpStatus.OK)
   rejectUser(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.tenantsService.rejectUser(id, user.tenantId);
   }
 
-  /** POST /tenants/me/users/:id/set-password (owner only) */
+  /** POST /tenants/me/users/:id/set-password (admin only) */
   @Post('me/users/:id/set-password')
-  @Roles('owner')
+  @Roles('admin')
   @HttpCode(HttpStatus.OK)
   setPassword(
     @CurrentUser() user: RequestUser,

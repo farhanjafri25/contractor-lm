@@ -38,7 +38,7 @@ export class SponsorController {
 
   // POST /sponsor/actions  — sponsor submits extension or termination request
   @Post()
-  @Roles('owner', 'admin', 'sponsor')
+  @Roles('admin', 'sponsor')
   @HttpCode(HttpStatus.CREATED)
   submit(@CurrentUser() user: RequestUser, @Body() dto: CreateSponsorActionDto) {
     return this.sponsorService.submit(dto, user.tenantId, user.userId);
@@ -46,7 +46,7 @@ export class SponsorController {
 
   // PATCH /sponsor/actions/:id/review  — owner/admin approves or rejects
   @Patch(':id/review')
-  @Roles('owner', 'admin')
+  @Roles('admin')
   @HttpCode(HttpStatus.OK)
   review(
     @CurrentUser() user: RequestUser,

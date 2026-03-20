@@ -68,7 +68,7 @@ export class ContractsController {
 
   // POST /contractors/:contractorId/contracts/:id/terminate
   @Post(':id/terminate')
-  @Roles('admin', 'owner')
+  @Roles('admin')
   @HttpCode(HttpStatus.OK)
   terminate(
     @CurrentUser() user: RequestUser,

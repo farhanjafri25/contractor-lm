@@ -36,14 +36,6 @@ import { UserRole } from '../../../schemas/tenant-user.schema';
 export class InviteUserDto {
     @IsEmail()
     email: string;
-
-    @IsEnum(UserRole)
-    role: UserRole;
-}
-
-export class UpdateUserRoleDto {
-    @IsEnum(UserRole)
-    role: UserRole;
 }
 
 export class ListUsersDto {
