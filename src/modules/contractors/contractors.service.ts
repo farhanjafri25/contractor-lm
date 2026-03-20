@@ -202,7 +202,7 @@ export class ContractorsService {
     const contract = await this.contractModel.create({
       contractor_id: identity._id,
       tenant_id: tenantOid,
-      sponsor_id: new Types.ObjectId(dto.contract.sponsor_id),
+      sponsor_id: userOid, // The creator is automatically the sponsor
       start_date: startDate,
       end_date: endDate,
       original_end_date: endDate,
@@ -312,7 +312,7 @@ export class ContractorsService {
     const contract = await this.contractModel.create({
       contractor_id: contractorOid,
       tenant_id: tenantOid,
-      sponsor_id: new Types.ObjectId(dto.contract.sponsor_id),
+      sponsor_id: userOid, // Rehire sponsor is automatically the caller
       start_date: startDate,
       end_date: endDate,
       original_end_date: endDate,

@@ -25,9 +25,6 @@ export class ApplicationAccessDto {
 }
 
 export class CreateContractDto {
-    @IsMongoId()
-    sponsor_id: string;
-
     @IsDateString()
     start_date: string;
 
