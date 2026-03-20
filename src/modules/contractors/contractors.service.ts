@@ -77,7 +77,6 @@ export class ContractorsService {
     // Build a contract-level filter for the active contract lookup
     const contractFilter: Record<string, any> = {
       tenant_id: new Types.ObjectId(tenantId),
-      status: { $in: [ContractStatus.ACTIVE, ContractStatus.EXTENDED, ContractStatus.SUSPENDED] },
     };
 
     // If there's a strict contract filter, pre-fetch valid contractor IDs
@@ -98,15 +97,25 @@ export class ContractorsService {
       this.identityModel.countDocuments(identityFilter),
     ]);
 
-    // Attach the most recent active contract to each identity
+    // Attach the most recent relevant contract to each identity
     const contractorIds = identities.map((i) => i._id);
-    const activeContracts = await this.contractModel
-      .find({ ...contractFilter, contractor_id: { $in: contractorIds } })
+    const recentContracts = await this.contractModel
+      .find({ tenant_id: new Types.ObjectId(tenantId), contractor_id: { $in: contractorIds } })
       .sort({ createdAt: -1 })
       .populate('sponsor_id', 'email role')
       .lean();
 
-    const contractMap = new Map(activeContracts.map((c) => [c.contractor_id.toString(), c]));
+    const contractMap = new Map();
+    for (const c of recentContracts) {
+      const cId = c.contractor_id.toString();
+      // Since it's sorted newest first, the first one we insert is the most recent
+      if (!contractMap.has(cId)) {
+        contractMap.set(cId, c);
+      } else if (query.status && c.status === query.status) {
+        // If the user specifically filtered by a status, ensure the matched status is the one rendered
+        contractMap.set(cId, c);
+      }
+    }
 
     const data = identities.map((identity) => {
       const active = contractMap.get(identity._id.toString());
