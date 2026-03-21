@@ -35,6 +35,27 @@ export class Tenant {
     @Prop({ required: true, unique: true, lowercase: true })
     email_domain: string;
 
+    @Prop({ type: String, default: null })
+    logo: string | null;
+
+    @Prop({ type: String, default: null })
+    slug: string | null;
+
+    @Prop({ type: String, default: 'United States of America' })
+    billing_country: string;
+
+    @Prop({ type: String, default: null })
+    company_size: string | null;
+
+    @Prop({ type: String, default: null })
+    tracking_method: string | null;
+
+    @Prop({ type: String, default: null })
+    contractor_volume: string | null;
+
+    @Prop({ type: String, default: null })
+    directory_provider: string | null;
+
     @Prop({ type: String, enum: TenantStatus, default: TenantStatus.TRIAL })
     status: TenantStatus;
 

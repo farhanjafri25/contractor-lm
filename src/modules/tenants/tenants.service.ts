@@ -174,6 +174,8 @@ export class TenantsService {
     const updateData: any = {};
     if (dto.name !== undefined) updateData.name = dto.name;
     if (dto.info !== undefined) updateData.info = dto.info;
+    if (dto.avatar !== undefined) updateData.avatar = dto.avatar;
+    if (dto.marketing_opt_in !== undefined) updateData.marketing_opt_in = dto.marketing_opt_in;
 
     await this.userModel.findByIdAndUpdate(user._id, updateData);
     

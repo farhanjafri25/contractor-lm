@@ -31,6 +31,12 @@ export class TenantUser {
     info: string | null;
 
     @Prop({ type: String, default: null })
+    avatar: string | null;
+
+    @Prop({ type: Boolean, default: false })
+    marketing_opt_in: boolean;
+
+    @Prop({ type: String, default: null })
     password_hash: string | null;
 
     @Prop({ type: String, enum: UserRole, required: true })
