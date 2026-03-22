@@ -73,3 +73,11 @@ export class CreateContractorDto {
     @Type(() => CreateContractDto)
     contract: CreateContractDto;
 }
+
+export class BulkCreateContractorsDto {
+    @IsArray()
+    @ArrayMinSize(1)
+    @ValidateNested({ each: true })
+    @Type(() => CreateContractorDto)
+    contractors: CreateContractorDto[];
+}

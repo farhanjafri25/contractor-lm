@@ -267,6 +267,33 @@ export class ContractorsService {
   }
 
   // ─────────────────────────────────────────────────────────
+  // BULK CREATE — POST /contractors/bulk
+  // ─────────────────────────────────────────────────────────
+  async bulkCreate(dtos: CreateContractorDto[], tenantId: string, userId: string, userRole: string = 'admin') {
+    const results = await Promise.allSettled(
+      dtos.map((dto) => this.create(dto, tenantId, userId, userRole))
+    );
+
+    const successful: { index: number; data: any }[] = [];
+    const failed: { index: number; reason: any }[] = [];
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        successful.push({ index, data: result.value });
+      } else {
+        failed.push({ index, reason: result.reason?.message || 'Unknown error' });
+      }
+    });
+
+    return {
+      total: dtos.length,
+      successful: successful.length,
+      failed: failed.length,
+      results: { successful, failed },
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────
   // REHIRE — POST /contractors/:id/contracts
   // ─────────────────────────────────────────────────────────
   async createContractForExistingIdentity(
