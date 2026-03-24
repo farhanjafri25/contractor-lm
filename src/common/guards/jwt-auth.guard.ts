@@ -25,7 +25,7 @@ export class RolesGuard implements CanActivate {
         if (!requiredRoles) return true;
         const { user } = context.switchToHttp().getRequest();
         if (!requiredRoles.includes(user.role)) {
-            throw new ForbiddenException(`Role '${user.role}' is not authorized for this action`);
+            throw new ForbiddenException('Please contact the workspace admin for this request');
         }
         return true;
     }
