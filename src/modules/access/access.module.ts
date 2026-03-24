@@ -13,7 +13,10 @@ import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-ev
             { name: ContractorAccess.name, schema: ContractorAccessSchema },
             { name: ContractorContract.name, schema: ContractorContractSchema },
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
+            { name: 'ContractorIdentity', schema: require('../../schemas/contractor-identity.schema').ContractorIdentitySchema },
+            { name: 'TenantApplication', schema: require('../../schemas/tenant-application.schema').TenantApplicationSchema },
         ]),
+        require('../integrations/integrations.module').IntegrationsModule,
         BullModule.registerQueue(
             { 
                 name: 'revocation',
@@ -32,7 +35,11 @@ import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-ev
         ),
     ],
     controllers: [AccessController],
-    providers: [AccessService],
+    providers: [
+        AccessService, 
+        require('../../jobs/provisioning.processor').ProvisioningProcessor,
+        require('../../jobs/revocation.processor').RevocationProcessor
+    ],
     exports: [AccessService],
 })
 export class AccessModule { }

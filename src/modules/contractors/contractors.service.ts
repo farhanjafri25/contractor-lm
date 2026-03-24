@@ -220,6 +220,14 @@ export class ContractorsService {
       !isSponsor, // enqueue
     );
 
+    if (!isSponsor && contract.create_google_account) {
+      await this.provisioningQueue.add('provision-google', {
+        tenant_id: tenantId,
+        contractor_id: identity._id.toString(),
+        contract_id: contract._id.toString(),
+      });
+    }
+
     // If sponsor, create an ONBOARD action
     if (isSponsor) {
       const responseDeadline = new Date();
@@ -268,9 +276,16 @@ export class ContractorsService {
   // BULK CREATE — POST /contractors/bulk
   // ─────────────────────────────────────────────────────────
   async bulkCreate(dtos: CreateContractorDto[], tenantId: string, userId: string, userRole: string = 'admin') {
-    const results = await Promise.allSettled(
-      dtos.map((dto) => this.create(dto, tenantId, userId, userRole))
-    );
+    const CHUNK_SIZE = 50;
+    const results: PromiseSettledResult<any>[] = [];
+
+    for (let i = 0; i < dtos.length; i += CHUNK_SIZE) {
+      const chunk = dtos.slice(i, i + CHUNK_SIZE);
+      const chunkResults = await Promise.allSettled(
+        chunk.map((dto) => this.create(dto, tenantId, userId, userRole))
+      );
+      results.push(...chunkResults);
+    }
 
     const successful: { index: number; data: any }[] = [];
     const failed: { index: number; reason: any }[] = [];

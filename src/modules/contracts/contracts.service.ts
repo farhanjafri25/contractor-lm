@@ -219,6 +219,18 @@ export class ContractsService {
       );
     }
 
+    if (contract.create_google_account) {
+      await this.revocationQueue.add(
+        'revoke-google',
+        {
+          contract_id: contract._id.toString(),
+          contractor_id: contract.contractor_id.toString(),
+          tenant_id: tenantId,
+        },
+        { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+      );
+    }
+
     await this.eventModel.create({
       tenant_id: contract.tenant_id,
       contractor_id: contract.contractor_id,

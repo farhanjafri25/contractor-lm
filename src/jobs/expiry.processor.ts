@@ -37,10 +37,18 @@ export class ExpiryProcessor {
     async processExpiredContracts() {
         const now = new Date();
 
-        const expiredContracts = await this.contractModel.find({
-            end_date: { $lte: now },
-            status: { $in: [ContractStatus.ACTIVE, ContractStatus.EXTENDED] },
-        });
+        let processedCount = 0;
+        const BATCH_SIZE = 100;
+
+        while (true) {
+            const expiredContracts = await this.contractModel.find({
+                end_date: { $lte: now },
+                status: { $in: [ContractStatus.ACTIVE, ContractStatus.EXTENDED] },
+            })
+            .limit(BATCH_SIZE)
+            .lean();
+
+            if (expiredContracts.length === 0) break;
 
         for (const contract of expiredContracts) {
             await this.contractModel.findByIdAndUpdate(contract._id, {
@@ -67,6 +75,18 @@ export class ExpiryProcessor {
                 );
             }
 
+            if (contract.create_google_account) {
+                 await this.revocationQueue.add(
+                    'revoke-google',
+                    {
+                        contract_id: contract._id.toString(),
+                        contractor_id: contract.contractor_id.toString(),
+                        tenant_id: contract.tenant_id.toString(),
+                    },
+                    { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+                );
+            }
+
             await this.eventModel.create({
                 tenant_id: contract.tenant_id,
                 contractor_id: contract.contractor_id,
@@ -76,10 +96,12 @@ export class ExpiryProcessor {
                 actor_id: null,
                 metadata: { end_date: contract.end_date, revocations_queued: accessRecords.length },
             });
+            processedCount += expiredContracts.length;
+        }
         }
 
-        if (expiredContracts.length > 0) {
-            console.log(`[ExpiryProcessor] Processed ${expiredContracts.length} expired contracts`);
+        if (processedCount > 0) {
+            console.log(`[ExpiryProcessor] Processed ${processedCount} expired contracts`);
         }
     }
 }

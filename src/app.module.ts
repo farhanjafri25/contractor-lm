@@ -17,6 +17,7 @@ import { EventsModule } from './modules/events/events.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { MailModule } from './modules/mail/mail.module';
 import { AiModule } from './modules/ai/ai.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -104,6 +105,7 @@ import { AppService } from './app.service';
     DashboardModule,
     MailModule,
     AiModule,
+    IntegrationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
