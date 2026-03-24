@@ -142,7 +142,7 @@ export class ContractorsService {
     const contracts = await this.contractModel
       .find({ contractor_id: identity._id })
       .populate('sponsor_id', 'email role')
-      .sort({ created_at: -1 })
+      .sort({ createdAt: -1 })
       .lean();
 
     return { ...identity, contracts };
@@ -174,9 +174,7 @@ export class ContractorsService {
         status: { $in: [ContractStatus.ACTIVE, ContractStatus.EXTENDED, ContractStatus.SUSPENDED] },
       });
       if (activeContract) {
-        throw new ConflictException(
-          'Contractor already has an active contract. Use POST /contractors/:id/contracts to rehire.',
-        );
+        throw new ConflictException('Contractor already has an active contract. Please use the Rehire workflow.');
       }
       // Auto-route to rehire if identity exists but no active contract
       return this.createContractForExistingIdentity(existing._id.toString(), dto, tenantId, userId, userRole);
@@ -331,7 +329,7 @@ export class ContractorsService {
     // Get the previous contract for rehire linkage
     const previousContract = await this.contractModel
       .findOne({ contractor_id: contractorOid })
-      .sort({ created_at: -1 });
+      .sort({ createdAt: -1 });
 
     const isSponsor = userRole === 'sponsor';
     const initialStatus = isSponsor ? ContractStatus.PENDING : ContractStatus.ACTIVE;
