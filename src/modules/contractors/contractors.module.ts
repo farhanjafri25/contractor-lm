@@ -8,6 +8,8 @@ import { ContractorContract, ContractorContractSchema } from '../../schemas/cont
 import { ContractorAccess, ContractorAccessSchema } from '../../schemas/contractor-access.schema';
 import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-event.schema';
 import { SponsorAction, SponsorActionSchema } from '../../schemas/sponsor-action.schema';
+import { Application, ApplicationSchema } from '../../schemas/application.schema';
+import { TenantApplication, TenantApplicationSchema } from '../../schemas/tenant-application.schema';
 import { ImportProcessor } from '../../jobs/import.processor';
 
 @Module({
@@ -18,6 +20,8 @@ import { ImportProcessor } from '../../jobs/import.processor';
             { name: ContractorAccess.name, schema: ContractorAccessSchema },
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
             { name: SponsorAction.name, schema: SponsorActionSchema },
+            { name: Application.name, schema: ApplicationSchema },
+            { name: TenantApplication.name, schema: TenantApplicationSchema },
         ]),
         BullModule.registerQueue({ 
             name: 'provisioning',

@@ -36,6 +36,10 @@ export class CreateContractDto {
     create_google_account?: boolean = false;
 
     @IsOptional()
+    @IsBoolean()
+    create_slack_account?: boolean = false;
+
+    @IsOptional()
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => ApplicationAccessDto)

@@ -87,6 +87,18 @@ export class ExpiryProcessor {
                 );
             }
 
+            if (contract.create_slack_account) {
+                await this.revocationQueue.add(
+                    'revoke-slack',
+                    {
+                        contract_id: contract._id.toString(),
+                        contractor_id: contract.contractor_id.toString(),
+                        tenant_id: contract.tenant_id.toString(),
+                    },
+                    { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+                );
+            }
+
             await this.eventModel.create({
                 tenant_id: contract.tenant_id,
                 contractor_id: contract.contractor_id,

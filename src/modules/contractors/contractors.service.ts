@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -32,9 +33,13 @@ import { CreateContractorDto } from './dto/create-contractor.dto';
 import { UpdateContractorDto } from './dto/update-contractor.dto';
 import { ListContractorsDto } from './dto/list-contractors.dto';
 import { SponsorAction, SponsorActionDocument, SponsorActionType, SponsorActionStatus } from '../../schemas/sponsor-action.schema';
+import { Application, ApplicationDocument } from '../../schemas/application.schema';
+import { TenantApplication, TenantApplicationDocument } from '../../schemas/tenant-application.schema';
 
 @Injectable()
 export class ContractorsService {
+  private readonly logger = new Logger(ContractorsService.name);
+
   constructor(
     @InjectModel(ContractorIdentity.name)
     private identityModel: Model<ContractorIdentityDocument>,
@@ -56,6 +61,12 @@ export class ContractorsService {
 
     @InjectModel(SponsorAction.name)
     private sponsorActionModel: Model<SponsorActionDocument>,
+
+    @InjectModel(Application.name)
+    private applicationModel: Model<ApplicationDocument>,
+
+    @InjectModel(TenantApplication.name)
+    private tenantApplicationModel: Model<TenantApplicationDocument>,
   ) { }
 
   // ─────────────────────────────────────────────────────────
@@ -152,6 +163,7 @@ export class ContractorsService {
   // CREATE — POST /contractors
   // ─────────────────────────────────────────────────────────
   async create(dto: CreateContractorDto, tenantId: string, userId: string, userRole: string = 'admin') {
+    this.logger.log(`[Create] Starting contractor creation: email=${dto.email}, tenant=${tenantId}, role=${userRole}`);
     const tenantOid = new Types.ObjectId(tenantId);
     const userOid = new Types.ObjectId(userId);
 
@@ -159,8 +171,10 @@ export class ContractorsService {
     const startDate = new Date(dto.contract.start_date);
     const endDate = new Date(dto.contract.end_date);
     if (endDate <= startDate) {
+      this.logger.warn(`[Create] Invalid dates: start=${startDate.toISOString()}, end=${endDate.toISOString()}`);
       throw new BadRequestException('end_date must be after start_date');
     }
+    this.logger.log(`[Create] Contract dates: ${startDate.toISOString()} → ${endDate.toISOString()}`);
 
     // Check for duplicate identity (same email within tenant)
     const existing = await this.identityModel.findOne({
@@ -168,19 +182,23 @@ export class ContractorsService {
       email: dto.email.toLowerCase(),
     });
     if (existing) {
+      this.logger.log(`[Create] Existing identity found for ${dto.email} (id=${existing._id}), checking for active contract...`);
       // Check if this is a rehire situation (no active contract)
       const activeContract = await this.contractModel.findOne({
         contractor_id: existing._id,
         status: { $in: [ContractStatus.ACTIVE, ContractStatus.EXTENDED, ContractStatus.SUSPENDED] },
       });
       if (activeContract) {
+        this.logger.warn(`[Create] Contractor ${dto.email} already has active contract ${activeContract._id} (status=${activeContract.status})`);
         throw new ConflictException('Contractor already has an active contract. Please use the Rehire workflow.');
       }
+      this.logger.log(`[Create] No active contract — routing to rehire flow for ${dto.email}`);
       // Auto-route to rehire if identity exists but no active contract
       return this.createContractForExistingIdentity(existing._id.toString(), dto, tenantId, userId, userRole);
     }
 
     // 1. Create contractor identity
+    this.logger.log(`[Create] Creating new identity for ${dto.email}...`);
     const identity = await this.identityModel.create({
       tenant_id: tenantOid,
       name: dto.name,
@@ -192,10 +210,12 @@ export class ContractorsService {
       notes: dto.notes ?? null,
       created_by: userOid,
     });
+    this.logger.log(`[Create] Identity created: id=${identity._id}, email=${identity.email}`);
 
     // 2. Create contract (depends on role)
     const isSponsor = userRole === 'sponsor';
     const initialStatus = isSponsor ? ContractStatus.PENDING : ContractStatus.ACTIVE;
+    this.logger.log(`[Create] Creating contract: status=${initialStatus}, google=${dto.contract.create_google_account ?? false}, slack=${dto.contract.create_slack_account ?? false}`);
 
     const contract = await this.contractModel.create({
       contractor_id: identity._id,
@@ -206,30 +226,67 @@ export class ContractorsService {
       original_end_date: endDate,
       status: initialStatus,
       create_google_account: dto.contract.create_google_account ?? false,
+      create_slack_account: dto.contract.create_slack_account ?? false,
       extension_count: 0,
       is_rehire: false,
       created_by: userOid,
     });
+    this.logger.log(`[Create] Contract created: id=${contract._id}, status=${contract.status}`);
 
     // 3. Create access records (and queue provisioning ONLY IF active)
+    const applicationAccess = [...(dto.contract.application_access ?? [])];
+    
+    // Auto-resolve Google/Slack if enabled via checkboxes
+    if (contract.create_google_account) {
+      const googleApp = await this._findTenantApplicationBySlug(tenantId, 'google-workspace');
+      if (googleApp && !applicationAccess.find(a => a.tenant_application_id === googleApp._id.toString())) {
+        applicationAccess.push({ tenant_application_id: googleApp._id.toString(), access_role: 'User' });
+      }
+    }
+    if (contract.create_slack_account) {
+      const slackApp = await this._findTenantApplicationBySlug(tenantId, 'slack');
+      if (slackApp && !applicationAccess.find(a => a.tenant_application_id === slackApp._id.toString())) {
+        applicationAccess.push({ tenant_application_id: slackApp._id.toString(), access_role: 'User' });
+      }
+    }
+
+    this.logger.log(`[Create] Creating access records: ${applicationAccess.length} apps (including special integrations), enqueue=${!isSponsor}`);
     const accessRecords = await this._createAccessAndQueueProvisioning(
       contract,
-      dto.contract.application_access ?? [],
+      applicationAccess,
       tenantId,
       userId,
       !isSponsor, // enqueue
     );
+    this.logger.log(`[Create] ${accessRecords.length} access records created`);
 
     if (!isSponsor && contract.create_google_account) {
+      this.logger.log(`[Create] Queuing provision-google job for contractor ${identity._id}`);
       await this.provisioningQueue.add('provision-google', {
         tenant_id: tenantId,
         contractor_id: identity._id.toString(),
         contract_id: contract._id.toString(),
       });
+      this.logger.log(`[Create] ✅ provision-google job queued`);
+    } else {
+      this.logger.log(`[Create] Skipping Google provisioning: isSponsor=${isSponsor}, create_google_account=${contract.create_google_account}`);
+    }
+
+    if (!isSponsor && contract.create_slack_account) {
+      this.logger.log(`[Create] Queuing provision-slack job for contractor ${identity._id}`);
+      await this.provisioningQueue.add('provision-slack', {
+        tenant_id: tenantId,
+        contractor_id: identity._id.toString(),
+        contract_id: contract._id.toString(),
+      });
+      this.logger.log(`[Create] ✅ provision-slack job queued`);
+    } else {
+      this.logger.log(`[Create] Skipping Slack provisioning: isSponsor=${isSponsor}, create_slack_account=${contract.create_slack_account}`);
     }
 
     // If sponsor, create an ONBOARD action
     if (isSponsor) {
+      this.logger.log(`[Create] Sponsor flow — creating ONBOARD action`);
       const responseDeadline = new Date();
       responseDeadline.setDate(responseDeadline.getDate() + 7); // Arbitrary deadline
 
@@ -243,6 +300,7 @@ export class ContractorsService {
         status: SponsorActionStatus.PENDING,
         response_deadline: responseDeadline,
       });
+      this.logger.log(`[Create] ONBOARD sponsor action created`);
     }
 
     // 4. Log lifecycle event
@@ -261,6 +319,7 @@ export class ContractorsService {
       },
     });
 
+    this.logger.log(`[Create] ✅ Contractor creation complete: identity=${identity._id}, contract=${contract._id}, accessRecords=${accessRecords.length}`);
     return {
       contractor: identity,
       contract,
@@ -358,19 +417,56 @@ export class ContractorsService {
       original_end_date: endDate,
       status: initialStatus,
       create_google_account: dto.contract.create_google_account ?? false,
+      create_slack_account: dto.contract.create_slack_account ?? false,
       extension_count: 0,
       is_rehire: true,
       previous_contract_id: previousContract?._id ?? null,
       created_by: userOid,
     });
 
+    const applicationAccess = [...(dto.contract.application_access ?? [])];
+    
+    // Auto-resolve Google/Slack if enabled via checkboxes
+    if (contract.create_google_account) {
+      const googleApp = await this._findTenantApplicationBySlug(tenantId, 'google-workspace');
+      if (googleApp && !applicationAccess.find(a => a.tenant_application_id === googleApp._id.toString())) {
+        applicationAccess.push({ tenant_application_id: googleApp._id.toString(), access_role: 'User' });
+      }
+    }
+    if (contract.create_slack_account) {
+      const slackApp = await this._findTenantApplicationBySlug(tenantId, 'slack');
+      if (slackApp && !applicationAccess.find(a => a.tenant_application_id === slackApp._id.toString())) {
+        applicationAccess.push({ tenant_application_id: slackApp._id.toString(), access_role: 'User' });
+      }
+    }
+
     const accessRecords = await this._createAccessAndQueueProvisioning(
       contract,
-      dto.contract.application_access ?? [],
+      applicationAccess,
       tenantId,
       userId,
       !isSponsor, // enqueue
     );
+
+    if (!isSponsor && contract.create_google_account) {
+      this.logger.log(`[Rehire] Queuing provision-google job for contractor ${contractorOid}`);
+      await this.provisioningQueue.add('provision-google', {
+        tenant_id: tenantId,
+        contractor_id: contractorOid.toString(),
+        contract_id: contract._id.toString(),
+      });
+      this.logger.log(`[Rehire] ✅ provision-google job queued`);
+    }
+
+    if (!isSponsor && contract.create_slack_account) {
+      this.logger.log(`[Rehire] Queuing provision-slack job for contractor ${contractorOid}`);
+      await this.provisioningQueue.add('provision-slack', {
+        tenant_id: tenantId,
+        contractor_id: contractorOid.toString(),
+        contract_id: contract._id.toString(),
+      });
+      this.logger.log(`[Rehire] ✅ provision-slack job queued`);
+    }
 
     if (isSponsor) {
       const responseDeadline = new Date();
@@ -452,6 +548,21 @@ export class ContractorsService {
   }
 
   // ─────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
+  // HELPERS
+  // ─────────────────────────────────────────────────────────
+
+  private async _findTenantApplicationBySlug(tenantId: string, slug: string) {
+    const app = await this.applicationModel.findOne({ slug });
+    if (!app) return null;
+
+    return this.tenantApplicationModel.findOne({
+      tenant_id: new Types.ObjectId(tenantId),
+      application_id: app._id,
+      is_deleted: false,
+    });
+  }
+
   // INTERNAL — creates access records and queues provisioning
   // ─────────────────────────────────────────────────────────
   private async _createAccessAndQueueProvisioning(
@@ -465,7 +576,11 @@ export class ContractorsService {
     userId: string,
     enqueue: boolean = true,
   ) {
-    if (!applicationAccess.length) return [];
+    this.logger.log(`[AccessQueue] _createAccessAndQueueProvisioning: contract=${contract._id}, apps=${applicationAccess.length}, enqueue=${enqueue}`);
+    if (!applicationAccess.length) {
+      this.logger.log(`[AccessQueue] No additional application access records to create`);
+      return [];
+    }
 
     const accessDocs = applicationAccess.map((app) => ({
       contract_id: contract._id,
@@ -480,10 +595,23 @@ export class ContractorsService {
     }));
 
     const accessRecords = await this.accessModel.insertMany(accessDocs);
+    this.logger.log(`[AccessQueue] Inserted ${accessRecords.length} access records into DB`);
 
     if (enqueue) {
-      // Queue a provisioning job for each access record
+      this.logger.log(`[AccessQueue] Queuing provision-access jobs for ${accessRecords.length} records...`);
+      // Find valid global application slugs to filter out special integrations
+      const googleApp = await this._findTenantApplicationBySlug(tenantId, 'google-workspace');
+      const slackApp = await this._findTenantApplicationBySlug(tenantId, 'slack');
+      const specialAppIds = [googleApp?._id?.toString(), slackApp?._id?.toString()].filter(Boolean);
+
+      // Queue a provisioning job for each access record, EXCEPT special apps
       for (const access of accessRecords) {
+        if (specialAppIds.includes(access.tenant_application_id.toString())) {
+          this.logger.log(`[AccessQueue] Skipping generic provision-access for ${access.tenant_application_id} (handled by specialised job)`);
+          continue;
+        }
+
+        this.logger.log(`[AccessQueue] Queuing provision-access: access_id=${access._id}, app=${access.tenant_application_id}`);
         await this.provisioningQueue.add(
           'provision-access',
           {
@@ -499,6 +627,9 @@ export class ContractorsService {
           { attempts: 3, backoff: { type: 'exponential', delay: 3000 } },
         );
       }
+      this.logger.log(`[AccessQueue] ✅ Generic provision-access jobs queued`);
+    } else {
+      this.logger.log(`[AccessQueue] Skipping provisioning queue (enqueue=false, likely sponsor flow)`);
     }
 
     return accessRecords;

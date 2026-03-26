@@ -2,6 +2,8 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Tenant, TenantDocument } from '../../schemas/tenant.schema';
+import { Application, ApplicationDocument } from '../../schemas/application.schema';
+import { TenantApplication, TenantApplicationDocument, TenantApplicationStatus } from '../../schemas/tenant-application.schema';
 import { google } from 'googleapis';
 
 @Injectable()
@@ -10,7 +12,9 @@ export class GoogleService {
   private oauth2Client;
 
   constructor(
-    @InjectModel(Tenant.name) private tenantModel: Model<TenantDocument>
+    @InjectModel(Tenant.name) private tenantModel: Model<TenantDocument>,
+    @InjectModel(Application.name) private applicationModel: Model<ApplicationDocument>,
+    @InjectModel(TenantApplication.name) private tenantApplicationModel: Model<TenantApplicationDocument>,
   ) {
     this.oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -43,6 +47,28 @@ export class GoogleService {
           { new: true }
         );
         this.logger.log(`Google Workspace connected for tenant: ${tenantId}`);
+
+        // Register in tenant_applications collection
+        const app = await this.applicationModel.findOne({ slug: 'google-workspace' });
+        if (app) {
+          await this.tenantApplicationModel.updateOne(
+            { tenant_id: new Types.ObjectId(tenantId), application_id: app._id },
+            { 
+              $set: { 
+                status: TenantApplicationStatus.CONNECTED,
+                display_name: 'Google Workspace',
+                is_connected: true,
+                is_deleted: false,
+                connected_at: new Date(),
+                last_synced_at: new Date(),
+                updatedAt: new Date(),
+              },
+              $setOnInsert: { createdAt: new Date() }
+            },
+            { upsert: true }
+          );
+          this.logger.log(`Dynamic registration: Google Workspace added to tenant_applications for ${tenantId}`);
+        }
       } else {
          this.logger.warn(`No explicit refresh token returned for tenant: ${tenantId}`);
       }
@@ -54,11 +80,18 @@ export class GoogleService {
   }
 
   async provisionUser(tenantId: string, email: string, firstName: string, lastName: string) {
+    this.logger.log(`[Google] provisionUser called: tenant=${tenantId}, email=${email}, name="${firstName} ${lastName}"`);
+    
     const tenant = await this.tenantModel.findById(tenantId).lean();
-    if (!tenant || !tenant.google_workspace_refresh_token) {
-      this.logger.warn(`Cannot provision ${email}: Tenant ${tenantId} holds no Google refresh token.`);
+    if (!tenant) {
+      this.logger.warn(`[Google] Tenant ${tenantId} not found in DB — cannot provision ${email}`);
       return null;
     }
+    if (!tenant.google_workspace_refresh_token) {
+      this.logger.warn(`[Google] Tenant ${tenantId} has no google_workspace_refresh_token — cannot provision ${email}`);
+      return null;
+    }
+    this.logger.log(`[Google] Tenant found, refresh token present. Setting up OAuth2 client...`);
 
     const client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -70,6 +103,7 @@ export class GoogleService {
     const directory = google.admin({ version: 'directory_v1', auth: client });
     const internalPassword = Math.random().toString(36).slice(-10) + 'A1!';
 
+    this.logger.log(`[Google] Calling directory.users.insert for ${email}...`);
     try {
       const res = await directory.users.insert({
         requestBody: {
@@ -82,18 +116,23 @@ export class GoogleService {
           changePasswordAtNextLogin: true, 
         }
       });
+      this.logger.log(`[Google] ✅ User provisioned successfully: primaryEmail=${res.data.primaryEmail}, id=${res.data.id}`);
       return res.data;
     } catch (e) {
-      this.logger.error(`Provisioning error on Google Directory API: ${e.message}`);
+      this.logger.error(`[Google] ❌ Provisioning error for ${email}: ${e.message} (code=${e.code})`);
       throw e;
     }
   }
 
   async suspendUser(tenantId: string, email: string) {
+    this.logger.log(`[Google] suspendUser called: tenant=${tenantId}, email=${email}`);
+    
     const tenant = await this.tenantModel.findById(tenantId).lean();
     if (!tenant || !tenant.google_workspace_refresh_token) {
+      this.logger.warn(`[Google] Tenant ${tenantId} missing or has no refresh token — skipping suspension for ${email}`);
       return null;
     }
+    this.logger.log(`[Google] Tenant found, refresh token present. Suspending ${email}...`);
 
     const client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -111,18 +150,27 @@ export class GoogleService {
           suspended: true,
         }
       });
+      this.logger.log(`[Google] ✅ User ${email} suspended successfully`);
       return res.data;
     } catch (e) {
-      this.logger.error(`Suspension error on Google Directory API: ${e.message}`);
+      if (e.code === 404 || e.message?.includes('Resource Not Found')) {
+        this.logger.warn(`[Google] User ${email} not found in directory — may have been already removed or never provisioned. Skipping suspension.`);
+        return null;
+      }
+      this.logger.error(`[Google] ❌ Suspension error for ${email}: ${e.message} (code=${e.code})`);
       throw e;
     }
   }
 
   async deleteUser(tenantId: string, email: string) {
+    this.logger.log(`[Google] deleteUser called: tenant=${tenantId}, email=${email}`);
+    
     const tenant = await this.tenantModel.findById(tenantId).lean();
     if (!tenant || !tenant.google_workspace_refresh_token) {
+      this.logger.warn(`[Google] Tenant ${tenantId} missing or has no refresh token — skipping deletion for ${email}`);
       return null;
     }
+    this.logger.log(`[Google] Tenant found, refresh token present. Deleting ${email}...`);
 
     const client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -137,9 +185,14 @@ export class GoogleService {
       const res = await directory.users.delete({
         userKey: email,
       });
+      this.logger.log(`[Google] ✅ User ${email} deleted successfully`);
       return res.data;
     } catch (e) {
-      this.logger.error(`Deletion error on Google Directory API: ${e.message}`);
+      if (e.code === 404 || e.message?.includes('Resource Not Found')) {
+        this.logger.warn(`[Google] User ${email} not found in directory — may have been already deleted or never provisioned. Skipping deletion.`);
+        return null;
+      }
+      this.logger.error(`[Google] ❌ Deletion error for ${email}: ${e.message} (code=${e.code})`);
       throw e;
     }
   }

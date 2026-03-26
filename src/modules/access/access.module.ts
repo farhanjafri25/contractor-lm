@@ -6,6 +6,11 @@ import { AccessService } from './access.service';
 import { ContractorAccess, ContractorAccessSchema } from '../../schemas/contractor-access.schema';
 import { ContractorContract, ContractorContractSchema } from '../../schemas/contractor-contract.schema';
 import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-event.schema';
+import { ContractorIdentity, ContractorIdentitySchema } from '../../schemas/contractor-identity.schema';
+import { TenantApplication, TenantApplicationSchema } from '../../schemas/tenant-application.schema';
+import { IntegrationsModule } from '../integrations/integrations.module';
+import { ProvisioningProcessor } from '../../jobs/provisioning.processor';
+import { RevocationProcessor } from '../../jobs/revocation.processor';
 
 @Module({
     imports: [
@@ -13,10 +18,10 @@ import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-ev
             { name: ContractorAccess.name, schema: ContractorAccessSchema },
             { name: ContractorContract.name, schema: ContractorContractSchema },
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
-            { name: 'ContractorIdentity', schema: require('../../schemas/contractor-identity.schema').ContractorIdentitySchema },
-            { name: 'TenantApplication', schema: require('../../schemas/tenant-application.schema').TenantApplicationSchema },
+            { name: ContractorIdentity.name, schema: ContractorIdentitySchema },
+            { name: TenantApplication.name, schema: TenantApplicationSchema },
         ]),
-        require('../integrations/integrations.module').IntegrationsModule,
+        IntegrationsModule,
         BullModule.registerQueue(
             { 
                 name: 'revocation',
@@ -37,8 +42,8 @@ import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-ev
     controllers: [AccessController],
     providers: [
         AccessService, 
-        require('../../jobs/provisioning.processor').ProvisioningProcessor,
-        require('../../jobs/revocation.processor').RevocationProcessor
+        ProvisioningProcessor,
+        RevocationProcessor
     ],
     exports: [AccessService],
 })

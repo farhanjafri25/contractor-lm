@@ -1,19 +1,19 @@
 import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
-import { GoogleService } from './google.service';
+import { SlackService } from './slack.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { RequestUser } from '../../common/types';
 
-@Controller('integrations/google')
-export class GoogleController {
-  constructor(private readonly googleService: GoogleService) {}
+@Controller('integrations/slack')
+export class SlackController {
+  constructor(private readonly slackService: SlackService) {}
 
   @Get('auth')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   getAuthUrl(@CurrentUser() user: RequestUser, @Res() res: Response) {
-    const url = this.googleService.getAuthorizationUrl(user.tenantId);
+    const url = this.slackService.getAuthorizationUrl(user.tenantId);
     return res.json({ url });
   }
 
@@ -29,8 +29,8 @@ export class GoogleController {
     }
 
     try {
-      await this.googleService.handleCallback(code, state);
-      return res.redirect(`${FRONTEND_URL}?success=google_connected`);
+      await this.slackService.handleCallback(code, state);
+      return res.redirect(`${FRONTEND_URL}?success=slack_connected`);
     } catch (e) {
       return res.redirect(`${FRONTEND_URL}?error=oauth_failed`);
     }

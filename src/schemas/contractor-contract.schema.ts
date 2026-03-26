@@ -45,6 +45,9 @@ export class ContractorContract {
     @Prop({ type: Boolean, default: false })
     create_google_account: boolean;
 
+    @Prop({ type: Boolean, default: false })
+    create_slack_account: boolean;
+
     @Prop({ type: Number, default: 0 })
     extension_count: number;
 
