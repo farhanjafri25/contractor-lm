@@ -8,6 +8,7 @@ import { ContractorAccess, ContractorAccessSchema } from '../../schemas/contract
 import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-event.schema';
 import { ExpiryProcessor } from '../../jobs/expiry.processor';
 import { ReminderProcessor } from '../../jobs/reminder.processor';
+import { SponsorAction, SponsorActionSchema } from '../../schemas/sponsor-action.schema';
 import { SlackModule } from '../slack/slack.module';
 
 @Module({
@@ -16,6 +17,7 @@ import { SlackModule } from '../slack/slack.module';
             { name: ContractorContract.name, schema: ContractorContractSchema },
             { name: ContractorAccess.name, schema: ContractorAccessSchema },
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
+            { name: SponsorAction.name, schema: SponsorActionSchema },
         ]),
         BullModule.registerQueue(
             { 

@@ -15,6 +15,8 @@ import {
 } from '../../schemas/slack-integration.schema';
 import { EncryptionService } from '../../common/services/encryption.service';
 import { ContractsService } from '../contracts/contracts.service';
+import { SponsorService } from '../sponsor/sponsor.service';
+import { SponsorActionType } from '../../schemas/sponsor-action.schema';
 import { WebClient } from '@slack/web-api';
 
 @Injectable()
@@ -28,6 +30,8 @@ export class SlackService {
     private readonly slackIntegrationModel: Model<SlackIntegrationDocument>,
     @Inject(forwardRef(() => ContractsService))
     private readonly contractsService: ContractsService,
+    @Inject(forwardRef(() => SponsorService))
+    private readonly sponsorService: SponsorService,
   ) {}
 
   getInstallUrl(tenantId: string, userId: string): string {
@@ -127,7 +131,8 @@ export class SlackService {
 
   async sendInteractiveReminder(
     tenantId: string,
-    email: string,
+    contractorEmail: string,
+    contractorName: string,
     contractId: string,
     endDate: Date,
   ): Promise<void> {
@@ -145,26 +150,26 @@ export class SlackService {
     const client = new WebClient(token);
 
     // 1. Lookup user by email
-    const userResult = await client.users.lookupByEmail({ email });
+    const userResult = await client.users.lookupByEmail({ email: contractorEmail });
 
     if (!userResult.ok || !userResult.user?.id) {
-      this.logger.error(`Could not find Slack user with email ${email}: ${userResult.error}`);
+      this.logger.error(`Could not find Slack user with email ${contractorEmail}: ${userResult.error}`);
       return;
     }
 
     const slackUserId = userResult.user.id;
     const formattedDate = new Date(endDate).toLocaleDateString();
 
-    // 2. Send Block Kit message
+    // 2. Send Block Kit message with contractor details
     const result = await client.chat.postMessage({
       channel: slackUserId,
-      text: `Your contract is expiring soon (${formattedDate}).`,
+      text: `Reminder: Your contract expires on ${formattedDate}.`,
       blocks: [
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `*Reminder:* Your contract is scheduled to expire on *${formattedDate}*.\nWhat would you like to do?`,
+            text: `*📋 Contract Expiry Reminder*\n\n*Contractor:* ${contractorName} (${contractorEmail})\n*Expiry Date:* *${formattedDate}*\n\nYour contract is expiring in 7 days. Please choose an action below:`,
           },
         },
         {
@@ -172,14 +177,14 @@ export class SlackService {
           elements: [
             {
               type: 'button',
-              text: { type: 'plain_text', text: 'Extend 30 Days' },
+              text: { type: 'plain_text', text: '✅ Extend 30 Days' },
               style: 'primary',
               value: `extend_${contractId}`,
               action_id: 'contract_extend_30',
             },
             {
               type: 'button',
-              text: { type: 'plain_text', text: 'Terminate' },
+              text: { type: 'plain_text', text: '🛑 Terminate' },
               style: 'danger',
               value: `terminate_${contractId}`,
               action_id: 'contract_terminate',
@@ -192,7 +197,7 @@ export class SlackService {
     if (!result.ok) {
       this.logger.error(`Failed to send Slack reminder: ${result.error}`);
     } else {
-      this.logger.log(`Slack reminder sent to ${email}`);
+      this.logger.log(`Slack reminder sent to ${contractorEmail}`);
     }
   }
 
@@ -205,32 +210,96 @@ export class SlackService {
 
     const tenantIdStr = integration.tenant_id.toString();
     const connectedByStr = integration.connected_by.toString();
+    const frontendUrl = this.configService.get<string>('frontendUrl') || 'http://localhost:3001';
 
     const action = payload.actions?.[0];
     if (!action) return;
 
     const actionId = action.action_id;
     const responseUrl = payload.response_url;
+    const sponsorSlackId = payload.user?.id;
+
+    const token = this.encryptionService.decrypt(integration.access_token_encrypted);
+    const client = new WebClient(token);
 
     try {
+      const contract = await this.contractsService.findOne(
+        action.value.replace('extend_', '').replace('terminate_', ''),
+        tenantIdStr
+      );
+      const contractor = (contract as any).contractor_id;
+      const contractorName: string = contractor?.name ?? 'Contractor';
+      const contractorEmail: string = contractor?.email ?? '';
+      const contractId = contract._id.toString();
+
       if (actionId === 'contract_extend_30') {
-        const contractId = action.value.replace('extend_', '');
-        const contract = await this.contractsService.findOne(contractId, tenantIdStr);
-        
         const newEndDate = new Date(contract.end_date);
         newEndDate.setDate(newEndDate.getDate() + 30);
 
-        await this.contractsService.extend(contractId, tenantIdStr, connectedByStr, {
-          new_end_date: newEndDate.toISOString() as any,
-          note: 'Extended by 30 days via Slack'
-        });
+        // Submit through sponsor approval flow
+        const sponsorAction = await this.sponsorService.submit(
+          {
+            contract_id: contractId,
+            action_type: SponsorActionType.EXTEND,
+            proposed_end_date: newEndDate as any,
+            justification: 'Extension requested via Slack (30 days)',
+          },
+          tenantIdStr,
+          connectedByStr,
+        );
 
-        await this.updateMessage(responseUrl, `✅ Contract successfully extended by 30 days!`);
+        // Update the original Slack message
+        await this.updateMessage(
+          responseUrl,
+          `⏳ Extension request submitted for *${contractorName}* (${contractorEmail}). Awaiting admin approval.`,
+        );
+
+        // Notify sponsor
+        if (sponsorSlackId) {
+          await client.chat.postMessage({
+            channel: sponsorSlackId,
+            text: `Extension request submitted for ${contractorName}`,
+            blocks: [{
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `⏳ *Extension Request Submitted*\n\n*Contractor:* ${contractorName} (${contractorEmail})\n*Proposed End Date:* ${newEndDate.toLocaleDateString()}\n*Status:* Awaiting admin approval\n\n<${frontendUrl}/contracts/${contractId}|View Contract →>`,
+              },
+            }],
+          });
+        }
       } else if (actionId === 'contract_terminate') {
-        const contractId = action.value.replace('terminate_', '');
-        await this.contractsService.terminate(contractId, tenantIdStr, connectedByStr);
-        
-        await this.updateMessage(responseUrl, `🛑 Contract has been marked for termination!`);
+        // Submit terminate through approval flow  
+        await this.sponsorService.submit(
+          {
+            contract_id: contractId,
+            action_type: SponsorActionType.TERMINATE,
+            justification: 'Termination requested via Slack',
+          },
+          tenantIdStr,
+          connectedByStr,
+        );
+
+        // Update the original Slack message
+        await this.updateMessage(
+          responseUrl,
+          `⏳ Termination request submitted for *${contractorName}* (${contractorEmail}). Awaiting admin approval.`,
+        );
+
+        // Notify sponsor
+        if (sponsorSlackId) {
+          await client.chat.postMessage({
+            channel: sponsorSlackId,
+            text: `Termination request submitted for ${contractorName}`,
+            blocks: [{
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `⏳ *Termination Request Submitted*\n\n*Contractor:* ${contractorName} (${contractorEmail})\n*Status:* Awaiting admin approval\n\n<${frontendUrl}/contracts/${contractId}|View Contract →>`,
+              },
+            }],
+          });
+        }
       }
     } catch (e: any) {
       this.logger.error(`Failed to handle Slack interaction: ${e.message}`);

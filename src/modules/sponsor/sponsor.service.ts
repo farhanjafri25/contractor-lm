@@ -3,6 +3,8 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -46,6 +48,7 @@ export class SponsorService {
     @InjectModel(LifecycleEvent.name)
     private eventModel: Model<LifecycleEventDocument>,
 
+    @Inject(forwardRef(() => ContractsService))
     private contractsService: ContractsService,
   ) { }
 
@@ -155,11 +158,7 @@ export class SponsorService {
       response_deadline: responseDeadline,
     });
 
-    // If it's a termination request, no approval needed — execute immediately
-    if (dto.action_type === SponsorActionType.TERMINATE) {
-      return this._executeTermination(action, contract, sponsorId);
-    }
-
+    // Both EXTEND and TERMINATE now go through admin approval
     await this.eventModel.create({
       tenant_id: tenantOid,
       contractor_id: contract.contractor_id,
@@ -195,9 +194,9 @@ export class SponsorService {
     });
     if (!action) throw new NotFoundException('Pending action not found');
 
-    // Only extension and onboard requests go through admin review
-    if (![SponsorActionType.EXTEND, SponsorActionType.ONBOARD].includes(action.action_type as SponsorActionType)) {
-      throw new BadRequestException('Only extension or onboard requests require admin review');
+    // Only extension, terminate, and onboard requests go through admin review
+    if (![SponsorActionType.EXTEND, SponsorActionType.TERMINATE, SponsorActionType.ONBOARD].includes(action.action_type as SponsorActionType)) {
+      throw new BadRequestException('This action type does not require admin review');
     }
 
     const reviewerOid = new Types.ObjectId(reviewerUserId);
@@ -216,9 +215,10 @@ export class SponsorService {
     let eventType: EventType;
     if (action.action_type === SponsorActionType.EXTEND) {
       eventType = isApproved ? EventType.EXTENSION_REQUEST_APPROVED : EventType.EXTENSION_REQUEST_REJECTED;
+    } else if (action.action_type === SponsorActionType.TERMINATE) {
+      eventType = isApproved ? EventType.CONTRACT_TERMINATED : EventType.EXTENSION_REQUEST_REJECTED; // Re-use EXTENSION_REJECTED or add TERMINATE_REJECTED if needed
     } else {
-      eventType = isApproved ? EventType.CONTRACTOR_ONBOARDED : EventType.EXTENSION_REQUEST_REJECTED; // Using extension rejected as fallback since ONBOARD_REJECTED doesn't exist yet, can add if needed
-      // Let's actually not override eventType for onboard here to avoid confusion, ONBOARDED is logged in ContractsService.
+      eventType = isApproved ? EventType.CONTRACTOR_ONBOARDED : EventType.EXTENSION_REQUEST_REJECTED;
     }
 
     // If approved — apply the action to the contract
@@ -228,6 +228,12 @@ export class SponsorService {
         action.proposed_end_date,
         reviewerUserId,
         action._id.toString(),
+      );
+    } else if (isApproved && action.action_type === SponsorActionType.TERMINATE) {
+      await this.contractsService.terminate(
+        action.contract_id.toString(),
+        tenantId,
+        reviewerUserId,
       );
     } else if (isApproved && action.action_type === SponsorActionType.ONBOARD) {
       await this.contractsService.approveOnboarding(

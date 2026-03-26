@@ -8,6 +8,7 @@ import {
 } from '../../schemas/slack-integration.schema';
 import { EncryptionService } from '../../common/services/encryption.service';
 import { ContractsModule } from '../contracts/contracts.module';
+import { SponsorModule } from '../sponsor/sponsor.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { ContractsModule } from '../contracts/contracts.module';
       { name: SlackIntegration.name, schema: SlackIntegrationSchema },
     ]),
     forwardRef(() => ContractsModule),
+    forwardRef(() => SponsorModule),
   ],
   controllers: [SlackController],
   providers: [SlackService, EncryptionService],

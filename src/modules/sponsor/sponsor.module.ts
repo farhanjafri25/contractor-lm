@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SponsorController } from './sponsor.controller';
 import { SponsorService } from './sponsor.service';
@@ -14,7 +14,7 @@ import { ContractsModule } from '../contracts/contracts.module';
             { name: ContractorContract.name, schema: ContractorContractSchema },
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
         ]),
-        ContractsModule, // provides ContractsService (applyApprovedExtension, terminate)
+        forwardRef(() => ContractsModule), // provides ContractsService (applyApprovedExtension, terminate)
     ],
     controllers: [SponsorController],
     providers: [SponsorService],

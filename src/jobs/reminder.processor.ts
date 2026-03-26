@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ContractorContract, ContractorContractDocument, ContractStatus } from '../schemas/contractor-contract.schema';
+import { SponsorAction, SponsorActionDocument, SponsorActionStatus } from '../schemas/sponsor-action.schema';
 import { SlackService } from '../modules/slack/slack.service';
 
 @Injectable()
@@ -12,6 +13,8 @@ export class ReminderProcessor {
     constructor(
         @InjectModel(ContractorContract.name)
         private contractModel: Model<ContractorContractDocument>,
+        @InjectModel(SponsorAction.name)
+        private sponsorActionModel: Model<SponsorActionDocument>,
         private slackService: SlackService,
     ) { }
 
@@ -31,24 +34,38 @@ export class ReminderProcessor {
             status: { $in: [ContractStatus.ACTIVE, ContractStatus.EXTENDED] },
         }).populate('contractor_id', 'name email').populate('sponsor_id', 'email name');
 
+        let sent = 0;
         for (const contract of expiringContracts) {
             try {
+                // Skip if a pending action already exists (sponsor already acted, waiting for admin)
+                const hasPendingAction = await this.sponsorActionModel.exists({
+                    contract_id: contract._id,
+                    status: SponsorActionStatus.PENDING,
+                });
+                if (hasPendingAction) {
+                    this.logger.log(`Skipping reminder for contract ${contract._id} — pending action exists`);
+                    continue;
+                }
+
                 const contractorEmail = (contract as any).contractor_id?.email;
+                const contractorName = (contract as any).contractor_id?.name || 'Contractor';
                 if (contractorEmail) {
                     await this.slackService.sendInteractiveReminder(
                         contract.tenant_id.toString(),
                         contractorEmail,
+                        contractorName,
                         contract._id.toString(),
                         contract.end_date
                     );
+                    sent++;
                 }
             } catch (error) {
                 this.logger.error(`Failed to send reminder for contract ${contract._id}: ${error.message}`);
             }
         }
 
-        if (expiringContracts.length > 0) {
-            this.logger.log(`Sent reminders for ${expiringContracts.length} expiring contracts`);
+        if (sent > 0) {
+            this.logger.log(`Sent reminders for ${sent} expiring contracts`);
         }
     }
 }
