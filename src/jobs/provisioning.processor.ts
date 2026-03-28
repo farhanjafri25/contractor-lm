@@ -2,7 +2,7 @@ import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger, Injectable } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { ContractorAccess, ContractorAccessDocument, ProvisioningStatus } from '../schemas/contractor-access.schema';
 import { ContractorIdentity, ContractorIdentityDocument } from '../schemas/contractor-identity.schema';
 import { TenantApplication, TenantApplicationDocument } from '../schemas/tenant-application.schema';
@@ -98,7 +98,7 @@ export class ProvisioningProcessor extends WorkerHost {
           'google-workspace',
           ProvisioningStatus.ACTIVE,
           undefined,
-          result?.primaryEmail
+          result?.primaryEmail ?? undefined
         );
 
         if (result) {
