@@ -149,14 +149,17 @@ export class ContractorsService {
       .lean();
 
     if (!identity) throw new NotFoundException('Contractor not found');
-
+  
     const contracts = await this.contractModel
       .find({ contractor_id: identity._id })
-      .populate('sponsor_id', 'email role')
+      .populate('sponsor_id', 'name full_name email role')
       .sort({ createdAt: -1 })
       .lean();
-
-    return { ...identity, contracts };
+  
+    // Attach the most recent sponsor to the identity for the detail view
+    const activeSponsor = contracts[0]?.sponsor_id || null;
+  
+    return { ...identity, sponsor_id: activeSponsor, contracts };
   }
 
   // ─────────────────────────────────────────────────────────

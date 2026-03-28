@@ -59,7 +59,10 @@ export class AccessService {
       .find(filter)
       .populate('contractor_id', 'name email department')
       .populate('contract_id', 'start_date end_date status')
-      .populate('tenant_application_id', 'application_id status')
+      .populate({
+        path: 'tenant_application_id',
+        populate: { path: 'application_id', select: 'name slug image_url' },
+      })
       .populate('granted_by', 'email role')
       .sort({ createdAt: -1 })
       .lean();
@@ -78,7 +81,10 @@ export class AccessService {
       })
       .populate('contractor_id', 'name email department job_title')
       .populate('contract_id', 'start_date end_date status extension_count')
-      .populate('tenant_application_id', 'application_id status')
+      .populate({
+        path: 'tenant_application_id',
+        populate: { path: 'application_id', select: 'name slug image_url' },
+      })
       .populate('granted_by', 'email role')
       .lean();
 
@@ -106,7 +112,10 @@ export class AccessService {
           contract_id: new Types.ObjectId(contractId),
           tenant_id: new Types.ObjectId(tenantId),
         })
-        .populate('tenant_application_id', 'application_id status')
+        .populate({
+          path: 'tenant_application_id',
+          populate: { path: 'application_id', select: 'name slug image_url' },
+        })
         .sort({ createdAt: 1 })
         .lean(),
     ]);

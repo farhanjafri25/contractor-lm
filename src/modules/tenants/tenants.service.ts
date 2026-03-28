@@ -163,6 +163,7 @@ export class TenantsService {
 
     const user = await this.userModel.create({
       tenant_id: tenantOid,
+      email: dto.email.toLowerCase(),
       role: UserRole.SPONSOR,
       is_invited: true,
       invited_by: invitedByOid,
