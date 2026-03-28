@@ -7,6 +7,8 @@ import { LifecycleEvent, LifecycleEventDocument, EventType, ActorType } from '..
 import { GoogleService } from '../modules/integrations/google.service';
 import { SlackService } from '../modules/integrations/slack.service';
 import { ContractorIdentity, ContractorIdentityDocument } from '../schemas/contractor-identity.schema';
+import { Application, ApplicationDocument } from '../schemas/application.schema';
+import { TenantApplication, TenantApplicationDocument } from '../schemas/tenant-application.schema';
 
 @Processor('revocation', {
     stalledInterval: 300000,
@@ -24,6 +26,12 @@ export class RevocationProcessor extends WorkerHost {
         @InjectModel(ContractorIdentity.name)
         private identityModel: Model<ContractorIdentityDocument>,
 
+        @InjectModel(Application.name)
+        private globalApplicationModel: Model<ApplicationDocument>,
+
+        @InjectModel(TenantApplication.name)
+        private applicationModel: Model<TenantApplicationDocument>,
+
         private googleService: GoogleService,
         private slackService: SlackService,
     ) {
@@ -39,6 +47,14 @@ export class RevocationProcessor extends WorkerHost {
 
                 await this.slackService.revokeUserOrNotify(tenant_id, identity.email);
 
+                // Update ContractorAccess record
+                await this.updateAccessStatusBySlug(
+                    tenant_id,
+                    contract_id,
+                    'slack',
+                    ProvisioningStatus.REVOKED
+                );
+
                 await this.eventModel.create({
                     tenant_id: new Types.ObjectId(tenant_id),
                     contractor_id: new Types.ObjectId(contractor_id),
@@ -49,6 +65,14 @@ export class RevocationProcessor extends WorkerHost {
                     metadata: { app_name: 'Slack', status: 'Revoked/Notified' },
                 });
             } catch (err: any) {
+                await this.updateAccessStatusBySlug(
+                    tenant_id,
+                    contract_id,
+                    'slack',
+                    ProvisioningStatus.FAILED,
+                    err.message
+                );
+                
                 await this.eventModel.create({
                     tenant_id: new Types.ObjectId(tenant_id),
                     contractor_id: new Types.ObjectId(contractor_id),
@@ -71,6 +95,14 @@ export class RevocationProcessor extends WorkerHost {
 
                 await this.googleService.deleteUser(tenant_id, identity.email);
 
+                // Update ContractorAccess record
+                await this.updateAccessStatusBySlug(
+                    tenant_id,
+                    contract_id,
+                    'google-workspace',
+                    ProvisioningStatus.REVOKED
+                );
+
                 await this.eventModel.create({
                     tenant_id: new Types.ObjectId(tenant_id),
                     contractor_id: new Types.ObjectId(contractor_id),
@@ -81,6 +113,14 @@ export class RevocationProcessor extends WorkerHost {
                     metadata: { app_name: 'Google Workspace', status: 'Deleted' },
                 });
             } catch (err: any) {
+                await this.updateAccessStatusBySlug(
+                    tenant_id,
+                    contract_id,
+                    'google-workspace',
+                    ProvisioningStatus.FAILED,
+                    err.message
+                );
+
                 await this.eventModel.create({
                     tenant_id: new Types.ObjectId(tenant_id),
                     contractor_id: new Types.ObjectId(contractor_id),
@@ -134,6 +174,46 @@ export class RevocationProcessor extends WorkerHost {
             });
 
             throw err;
+        }
+    }
+
+    private async updateAccessStatusBySlug(
+        tenantId: string,
+        contractId: string,
+        appSlug: string,
+        status: ProvisioningStatus,
+        failureReason?: string
+    ) {
+        try {
+            const application = await this.globalApplicationModel.findOne({ slug: appSlug });
+            if (!application) return;
+
+            const tenantApplication = await this.applicationModel.findOne({
+                tenant_id: new Types.ObjectId(tenantId),
+                application_id: application._id,
+            });
+            if (!tenantApplication) return;
+
+            const update: Record<string, any> = { provisioning_status: status };
+            if (status === ProvisioningStatus.REVOKED) {
+                update.revoked_at = new Date();
+                update.revoked_by = 'system';
+            }
+            if (failureReason) {
+                update.failure_reason = failureReason;
+            }
+
+            await this.accessModel.findOneAndUpdate(
+                {
+                    tenant_id: new Types.ObjectId(tenantId),
+                    contract_id: new Types.ObjectId(contractId),
+                    tenant_application_id: tenantApplication._id,
+                },
+                { $set: update },
+                { new: true }
+            );
+        } catch (err) {
+            // Silently fail status update within revocation loop
         }
     }
 }

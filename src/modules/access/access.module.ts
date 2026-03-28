@@ -8,6 +8,7 @@ import { ContractorContract, ContractorContractSchema } from '../../schemas/cont
 import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-event.schema';
 import { ContractorIdentity, ContractorIdentitySchema } from '../../schemas/contractor-identity.schema';
 import { TenantApplication, TenantApplicationSchema } from '../../schemas/tenant-application.schema';
+import { Application, ApplicationSchema } from '../../schemas/application.schema';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { ProvisioningProcessor } from '../../jobs/provisioning.processor';
 import { RevocationProcessor } from '../../jobs/revocation.processor';
@@ -20,6 +21,7 @@ import { RevocationProcessor } from '../../jobs/revocation.processor';
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
             { name: ContractorIdentity.name, schema: ContractorIdentitySchema },
             { name: TenantApplication.name, schema: TenantApplicationSchema },
+            { name: Application.name, schema: ApplicationSchema },
         ]),
         IntegrationsModule,
         BullModule.registerQueue(

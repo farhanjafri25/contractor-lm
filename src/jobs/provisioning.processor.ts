@@ -8,6 +8,7 @@ import { ContractorIdentity, ContractorIdentityDocument } from '../schemas/contr
 import { TenantApplication, TenantApplicationDocument } from '../schemas/tenant-application.schema';
 import { GoogleService } from '../modules/integrations/google.service';
 import { SlackService } from '../modules/integrations/slack.service';
+import { Application, ApplicationDocument } from '../schemas/application.schema';
 
 @Processor('provisioning')
 @Injectable()
@@ -18,6 +19,7 @@ export class ProvisioningProcessor extends WorkerHost {
     @InjectModel(ContractorAccess.name) private accessModel: Model<ContractorAccessDocument>,
     @InjectModel(ContractorIdentity.name) private identityModel: Model<ContractorIdentityDocument>,
     @InjectModel(TenantApplication.name) private applicationModel: Model<TenantApplicationDocument>,
+    @InjectModel(Application.name) private globalApplicationModel: Model<ApplicationDocument>,
     private googleService: GoogleService,
     private slackService: SlackService,
   ) {
@@ -28,58 +30,93 @@ export class ProvisioningProcessor extends WorkerHost {
     this.logger.log(`[Provisioning] ▶ Received job "${job.name}" (ID: ${job.id}) | Data: ${JSON.stringify(job.data)}`);
 
     if (job.name === 'provision-slack') {
-      this.logger.log(`[Provisioning:Slack] Starting for contractor_id=${job.data.contractor_id}, tenant_id=${job.data.tenant_id}`);
-      
-      const identity = await this.identityModel.findById(job.data.contractor_id);
-      if (!identity) {
-        this.logger.error(`[Provisioning:Slack] Contractor identity ${job.data.contractor_id} not found in DB — aborting`);
-        throw new Error('Contractor identity destroyed mid-provision');
+      try {
+        this.logger.log(`[Provisioning:Slack] Starting for contractor_id=${job.data.contractor_id}, tenant_id=${job.data.tenant_id}`);
+        
+        const identity = await this.identityModel.findById(job.data.contractor_id);
+        if (!identity) {
+          this.logger.error(`[Provisioning:Slack] Contractor identity ${job.data.contractor_id} not found in DB — aborting`);
+          throw new Error('Contractor identity destroyed mid-provision');
+        }
+        
+        const [firstName, ...lastNameParts] = identity.name.split(' ');
+        const lastName = lastNameParts.join(' ') || 'Contractor';
+        
+        await this.slackService.inviteUserOrNotify(
+          job.data.tenant_id,
+          identity.email,
+          firstName,
+          lastName
+        );
+
+        // Update ContractorAccess record
+        await this.updateAccessStatusBySlug(
+          job.data.tenant_id,
+          job.data.contract_id,
+          'slack',
+          ProvisioningStatus.ACTIVE
+        );
+
+        this.logger.log(`[Provisioning:Slack] ✅ Completed successfully for ${identity.email} (Job ${job.id})`);
+        return;
+      } catch (e) {
+        await this.updateAccessStatusBySlug(
+          job.data.tenant_id,
+          job.data.contract_id,
+          'slack',
+          ProvisioningStatus.FAILED,
+          e.message
+        );
+        throw e;
       }
-      this.logger.log(`[Provisioning:Slack] Identity found: name="${identity.name}", email="${identity.email}"`);
-      
-      const [firstName, ...lastNameParts] = identity.name.split(' ');
-      const lastName = lastNameParts.join(' ') || 'Contractor';
-      this.logger.log(`[Provisioning:Slack] Parsed name: firstName="${firstName}", lastName="${lastName}"`);
-      
-      this.logger.log(`[Provisioning:Slack] Calling slackService.inviteUserOrNotify(tenant=${job.data.tenant_id}, email=${identity.email})`);
-      await this.slackService.inviteUserOrNotify(
-        job.data.tenant_id,
-        identity.email,
-        firstName,
-        lastName
-      );
-      this.logger.log(`[Provisioning:Slack] ✅ Completed successfully for ${identity.email} (Job ${job.id})`);
-      return;
     }
 
     if (job.name === 'provision-google') {
-      this.logger.log(`[Provisioning:Google] Starting for contractor_id=${job.data.contractor_id}, tenant_id=${job.data.tenant_id}`);
-      
-      const identity = await this.identityModel.findById(job.data.contractor_id);
-      if (!identity) {
-        this.logger.error(`[Provisioning:Google] Contractor identity ${job.data.contractor_id} not found in DB — aborting`);
-        throw new Error('Contractor identity destroyed mid-provision');
+      try {
+        this.logger.log(`[Provisioning:Google] Starting for contractor_id=${job.data.contractor_id}, tenant_id=${job.data.tenant_id}`);
+        
+        const identity = await this.identityModel.findById(job.data.contractor_id);
+        if (!identity) {
+          this.logger.error(`[Provisioning:Google] Contractor identity ${job.data.contractor_id} not found in DB — aborting`);
+          throw new Error('Contractor identity destroyed mid-provision');
+        }
+        
+        const [firstName, ...lastNameParts] = identity.name.split(' ');
+        const lastName = lastNameParts.join(' ') || 'Contractor';
+        
+        const result = await this.googleService.provisionUser(
+          job.data.tenant_id,
+          identity.email,
+          firstName,
+          lastName
+        );
+        
+        // Update ContractorAccess record
+        await this.updateAccessStatusBySlug(
+          job.data.tenant_id,
+          job.data.contract_id,
+          'google-workspace',
+          ProvisioningStatus.ACTIVE,
+          undefined,
+          result?.primaryEmail
+        );
+
+        if (result) {
+          this.logger.log(`[Provisioning:Google] ✅ Google user created: primaryEmail=${result.primaryEmail} (Job ${job.id})`);
+        } else {
+          this.logger.warn(`[Provisioning:Google] ⚠️ provisionUser returned null (missing refresh token?) (Job ${job.id})`);
+        }
+        return;
+      } catch (e) {
+        await this.updateAccessStatusBySlug(
+          job.data.tenant_id,
+          job.data.contract_id,
+          'google-workspace',
+          ProvisioningStatus.FAILED,
+          e.message
+        );
+        throw e;
       }
-      this.logger.log(`[Provisioning:Google] Identity found: name="${identity.name}", email="${identity.email}"`);
-      
-      const [firstName, ...lastNameParts] = identity.name.split(' ');
-      const lastName = lastNameParts.join(' ') || 'Contractor';
-      this.logger.log(`[Provisioning:Google] Parsed name: firstName="${firstName}", lastName="${lastName}"`);
-      
-      this.logger.log(`[Provisioning:Google] Calling googleService.provisionUser(tenant=${job.data.tenant_id}, email=${identity.email})`);
-      const result = await this.googleService.provisionUser(
-        job.data.tenant_id,
-        identity.email,
-        firstName,
-        lastName
-      );
-      
-      if (result) {
-        this.logger.log(`[Provisioning:Google] ✅ Google user created: primaryEmail=${result.primaryEmail} (Job ${job.id})`);
-      } else {
-        this.logger.warn(`[Provisioning:Google] ⚠️ provisionUser returned null — tenant likely missing refresh token (Job ${job.id})`);
-      }
-      return;
     }
 
     // Generic provision-access job
@@ -137,5 +174,63 @@ export class ProvisioningProcessor extends WorkerHost {
   @OnWorkerEvent('active')
   onActive(job: Job) {
     this.logger.log(`[Provisioning] ⏳ Job ${job.id} ("${job.name}") is now active (attempt ${job.attemptsMade + 1})`);
+  }
+
+  private async updateAccessStatusBySlug(
+    tenantId: string,
+    contractId: string,
+    appSlug: string,
+    status: ProvisioningStatus,
+    failureReason?: string,
+    externalId?: string
+  ) {
+    try {
+      this.logger.log(`[Processor:UpdateStatus] Looking for ${appSlug} access for contract ${contractId}...`);
+      
+      const application = await this.globalApplicationModel.findOne({ slug: appSlug });
+      if (!application) {
+        this.logger.warn(`[Processor:UpdateStatus] Global application "${appSlug}" not found — skipping status update`);
+        return;
+      }
+
+      const tenantApplication = await this.applicationModel.findOne({
+        tenant_id: new Types.ObjectId(tenantId),
+        application_id: application._id,
+      });
+
+      if (!tenantApplication) {
+        this.logger.warn(`[Processor:UpdateStatus] TenantApplication for ${appSlug} not found for tenant ${tenantId}`);
+        return;
+      }
+
+      const update: Record<string, any> = { provisioning_status: status };
+      if (status === ProvisioningStatus.ACTIVE) {
+        update.granted_at = new Date();
+      }
+      if (failureReason) {
+        update.failure_reason = failureReason;
+      }
+      if (externalId) {
+        update.external_account_id = externalId;
+      }
+
+      const access = await this.accessModel.findOneAndUpdate(
+        {
+          tenant_id: new Types.ObjectId(tenantId),
+          contract_id: new Types.ObjectId(contractId),
+          tenant_application_id: tenantApplication._id,
+        },
+        { $set: update },
+        { new: true }
+      );
+
+      if (access) {
+        this.logger.log(`[Processor:UpdateStatus] ✅ Set ${appSlug} access to ${status} for access_id=${access._id}`);
+      } else {
+        this.logger.warn(`[Processor:UpdateStatus] ⚠️ No PENDING access record found for ${appSlug} / contract ${contractId}`);
+      }
+    } catch (err) {
+      this.logger.error(`[Processor:UpdateStatus] ❌ Failed to update access status: ${err.message}`);
+    }
   }
 }
