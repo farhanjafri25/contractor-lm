@@ -17,6 +17,7 @@ import {
   ContractorContract,
   ContractorContractDocument,
   ContractStatus,
+  TerminationReason,
 } from '../../schemas/contractor-contract.schema';
 import {
   ContractorAccess,
@@ -59,6 +60,9 @@ export class ContractorsService {
     @InjectQueue('import')
     private importQueue: Queue,
 
+    @InjectQueue('revocation')
+    private revocationQueue: Queue,
+
     @InjectModel(SponsorAction.name)
     private sponsorActionModel: Model<SponsorActionDocument>,
 
@@ -78,7 +82,10 @@ export class ContractorsService {
     const skip = (page - 1) * limit;
 
     // Build an identity-level filter
-    const identityFilter: Record<string, any> = { tenant_id: new Types.ObjectId(tenantId) };
+    const identityFilter: Record<string, any> = { 
+      tenant_id: new Types.ObjectId(tenantId),
+      is_deleted: { $ne: true }
+    };
     if (query.search) {
       const regex = new RegExp(query.search, 'i');
       identityFilter.$or = [{ name: regex }, { email: regex }];
@@ -145,7 +152,11 @@ export class ContractorsService {
   // ─────────────────────────────────────────────────────────
   async findOne(contractorId: string, tenantId: string) {
     const identity = await this.identityModel
-      .findOne({ _id: new Types.ObjectId(contractorId), tenant_id: new Types.ObjectId(tenantId) })
+      .findOne({ 
+        _id: new Types.ObjectId(contractorId), 
+        tenant_id: new Types.ObjectId(tenantId),
+        is_deleted: { $ne: true }
+      })
       .lean();
 
     if (!identity) throw new NotFoundException('Contractor not found');
@@ -519,6 +530,102 @@ export class ContractorsService {
     );
     if (!updated) throw new NotFoundException('Contractor not found');
     return updated;
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // DELETE IDENTITY (SOFT) — DELETE /contractors/:id
+  // ─────────────────────────────────────────────────────────
+  async remove(contractorId: string, tenantId: string, userId: string) {
+    const contractorOid = new Types.ObjectId(contractorId);
+    const tenantOid = new Types.ObjectId(tenantId);
+    const userOid = new Types.ObjectId(userId);
+
+    const identity = await this.identityModel.findOne({
+      _id: contractorOid,
+      tenant_id: tenantOid,
+      is_deleted: { $ne: true },
+    });
+    if (!identity) throw new NotFoundException('Contractor not found');
+
+    // 1. Mark identity as deleted (Soft Delete)
+    await this.identityModel.findByIdAndUpdate(contractorOid, {
+      $set: {
+        is_deleted: true,
+        deleted_at: new Date(),
+        deleted_by: userOid,
+      },
+    });
+
+    // 2. Terminate all active contracts and find the most recent one for event logging
+    const contracts = await this.contractModel.find({ 
+      contractor_id: contractorOid 
+    }).sort({ createdAt: -1 });
+
+    if (contracts.length > 0) {
+      await this.contractModel.updateMany(
+        { contractor_id: contractorOid, status: { $ne: ContractStatus.TERMINATED } },
+        { $set: { status: ContractStatus.TERMINATED, termination_reason: TerminationReason.EARLY_TERMINATION } },
+      );
+    }
+    
+    // Pick the most recent contract to satisfy potential schema requirements or for better auditing
+    const latestContract = contracts[0];
+    const latestContractId = latestContract?._id;
+
+    // 3. Queue revocation for all active access records (with DELETE action)
+    const accessRecords = await this.accessModel.find({
+      contractor_id: contractorOid,
+      provisioning_status: { $in: [ProvisioningStatus.ACTIVE, ProvisioningStatus.PENDING] },
+    });
+
+    for (const access of accessRecords) {
+      await this.revocationQueue.add(
+        'revoke-access',
+        {
+          access_id: access._id.toString(),
+          contractor_id: contractorOid.toString(),
+          contract_id: access.contract_id.toString(), // Use the contract linked to this specific access
+          tenant_id: tenantId,
+          tenant_application_id: access.tenant_application_id.toString(),
+          external_account_id: access.external_account_id,
+          action: 'delete',
+        },
+        { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+      );
+    }
+
+    // Special handling for managed Google/Slack accounts on any contracts
+    for (const contract of contracts) {
+      if (contract.create_google_account) {
+        await this.revocationQueue.add('revoke-google', {
+          contract_id: contract._id.toString(),
+          contractor_id: contractorOid.toString(),
+          tenant_id: tenantId,
+          action: 'delete',
+        });
+      }
+      if (contract.create_slack_account) {
+        await this.revocationQueue.add('revoke-slack', {
+          contract_id: contract._id.toString(),
+          contractor_id: contractorOid.toString(),
+          tenant_id: tenantId,
+          action: 'delete',
+        });
+      }
+    }
+
+    // 4. Log lifecycle event
+    await this.eventModel.create({
+      tenant_id: tenantOid,
+      contractor_id: contractorOid,
+      contract_id: latestContractId || null, // Pass it explicitly, even if null
+      event_type: EventType.CONTRACTOR_DELETED,
+      actor_type: ActorType.USER,
+      actor_id: userOid,
+      metadata: { deleted_at: new Date(), access_revocations_queued: accessRecords.length },
+    });
+
+    return { success: true, message: 'Contractor soft-deleted and workspace revocations queued.' };
   }
 
   // ─────────────────────────────────────────────────────────

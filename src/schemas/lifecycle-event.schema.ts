@@ -8,6 +8,7 @@ export enum EventType {
     CONTRACTOR_CREATED = 'contractor.created',
     CONTRACTOR_ONBOARDED = 'contractor.onboarded',
     CONTRACTOR_BULK_IMPORTED = 'contractor.bulk_imported',
+    CONTRACTOR_DELETED = 'contractor.deleted',
 
     // Access
     ACCESS_GRANTED = 'access.granted',
@@ -48,8 +49,8 @@ export class LifecycleEvent {
     @Prop({ type: Types.ObjectId, ref: 'ContractorIdentity', required: true })
     contractor_id: Types.ObjectId;
 
-    @Prop({ type: Types.ObjectId, ref: 'ContractorContract', required: true })
-    contract_id: Types.ObjectId;
+    @Prop({ type: Types.ObjectId, ref: 'ContractorContract', required: false, default: null })
+    contract_id: Types.ObjectId | null;
 
     @Prop({ type: Types.ObjectId, ref: 'ContractorAccess', default: null })
     access_id: Types.ObjectId | null;

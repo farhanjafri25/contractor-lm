@@ -37,6 +37,13 @@ import { ImportProcessor } from '../../jobs/import.processor';
                 removeOnFail: false,
             }
         }),
+        BullModule.registerQueue({ 
+            name: 'revocation',
+            defaultJobOptions: {
+                removeOnComplete: true,
+                removeOnFail: false,
+            }
+        }),
     ],
     controllers: [ContractorsController],
     providers: [ContractorsService, ImportProcessor],

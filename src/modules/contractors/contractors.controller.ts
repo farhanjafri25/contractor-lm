@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -91,6 +92,17 @@ export class ContractorsController {
     @Body() dto: UpdateContractorDto,
   ) {
     return this.contractorsService.update(id, user.tenantId, dto);
+  }
+
+  // DELETE /contractors/:id
+  @Delete(':id')
+  @Roles('admin')
+  @HttpCode(HttpStatus.OK)
+  remove(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+  ) {
+    return this.contractorsService.remove(id, user.tenantId, user.userId);
   }
 
   // POST /contractors/import   (CSV bulk upload)
