@@ -135,12 +135,31 @@ export class ContractorsService {
       }
     }
 
+    // Fetch access records for all identified active contracts
+    const activeContractIds = Array.from(contractMap.values()).map(c => c._id);
+    const accessRecords = await this.accessModel
+      .find({ contract_id: { $in: activeContractIds } })
+      .populate({
+        path: 'tenant_application_id',
+        populate: { path: 'application_id', select: 'name slug image_url' }
+      })
+      .lean();
+
+    const accessMap = new Map();
+    for (const access of accessRecords) {
+      const cId = access.contract_id.toString();
+      if (!accessMap.has(cId)) accessMap.set(cId, []);
+      accessMap.get(cId).push(access);
+    }
+
     const data = identities.map((identity) => {
       const active = contractMap.get(identity._id.toString());
+      const access = active ? (accessMap.get(active._id.toString()) || []) : [];
+      
       return {
         ...identity,
         sponsor_id: active?.sponsor_id ?? null,
-        contracts: active ? [active] : [],
+        contracts: active ? [{ ...active, access }] : [],
       };
     });
 
@@ -166,11 +185,33 @@ export class ContractorsService {
       .populate('sponsor_id', 'name full_name email role')
       .sort({ createdAt: -1 })
       .lean();
+
+    // Populate access for each contract in detail view
+    const contractIds = contracts.map(c => c._id);
+    const accessRecords = await this.accessModel
+      .find({ contract_id: { $in: contractIds } })
+      .populate({
+        path: 'tenant_application_id',
+        populate: { path: 'application_id', select: 'name slug image_url' }
+      })
+      .lean();
+
+    const accessMap = new Map();
+    for (const access of accessRecords) {
+      const cId = access.contract_id.toString();
+      if (!accessMap.has(cId)) accessMap.set(cId, []);
+      accessMap.get(cId).push(access);
+    }
+
+    const contractsWithAccess = contracts.map(c => ({
+      ...c,
+      access: accessMap.get(c._id.toString()) || [],
+    }));
   
     // Attach the most recent sponsor to the identity for the detail view
     const activeSponsor = contracts[0]?.sponsor_id || null;
   
-    return { ...identity, sponsor_id: activeSponsor, contracts };
+    return { ...identity, sponsor_id: activeSponsor, contracts: contractsWithAccess };
   }
 
   // ─────────────────────────────────────────────────────────
