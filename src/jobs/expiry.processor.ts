@@ -70,6 +70,7 @@ export class ExpiryProcessor {
                         tenant_id: contract.tenant_id.toString(),
                         tenant_application_id: access.tenant_application_id.toString(),
                         external_account_id: access.external_account_id,
+                        action: 'suspend',
                     },
                     { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
                 );
@@ -82,6 +83,7 @@ export class ExpiryProcessor {
                         contract_id: contract._id.toString(),
                         contractor_id: contract.contractor_id.toString(),
                         tenant_id: contract.tenant_id.toString(),
+                        action: 'suspend',
                     },
                     { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
                 );
@@ -94,6 +96,7 @@ export class ExpiryProcessor {
                         contract_id: contract._id.toString(),
                         contractor_id: contract.contractor_id.toString(),
                         tenant_id: contract.tenant_id.toString(),
+                        action: 'suspend',
                     },
                     { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
                 );

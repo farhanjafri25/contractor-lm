@@ -143,7 +143,8 @@ export class GoogleService {
       this.logger.warn(`[Google] Tenant ${tenantId} missing or has no refresh token — skipping suspension for ${email}`);
       return null;
     }
-    this.logger.log(`[Google] Tenant found, refresh token present. Suspending ${externalId || email}...`);
+    this.logger.log(`[Google] ACTION: Suspend User | Target: ${externalId || email} | Tenant: ${tenantId}`);
+    this.logger.log(`[Google] Tenant found, refresh token present. Proceeding with suspension...`);
 
     const client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -181,7 +182,8 @@ export class GoogleService {
       this.logger.warn(`[Google] Tenant ${tenantId} missing or has no refresh token — skipping deletion for ${email}`);
       return null;
     }
-    this.logger.log(`[Google] Tenant found, refresh token present. Deleting ${externalId || email}...`);
+    this.logger.log(`[Google] ACTION: Delete User | Target: ${externalId || email} | Tenant: ${tenantId}`);
+    this.logger.log(`[Google] Tenant found, refresh token present. Proceeding with deletion...`);
 
     const client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,

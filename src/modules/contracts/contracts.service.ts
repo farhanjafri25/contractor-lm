@@ -84,6 +84,54 @@ export class ContractsService {
       status: ContractStatus.SUSPENDED,
     });
 
+    // Queue revocation for all active access records (with suspend action)
+    const accessRecords = await this.accessModel.find({
+      contract_id: contract._id,
+      provisioning_status: { $in: [ProvisioningStatus.ACTIVE, ProvisioningStatus.PENDING] },
+    });
+
+    for (const access of accessRecords) {
+      await this.revocationQueue.add(
+        'revoke-access',
+        {
+          access_id: access._id.toString(),
+          contract_id: contract._id.toString(),
+          contractor_id: contract.contractor_id.toString(),
+          tenant_id: tenantId,
+          tenant_application_id: access.tenant_application_id.toString(),
+          external_account_id: access.external_account_id,
+          action: 'suspend',
+        },
+        { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+      );
+    }
+
+    if (contract.create_google_account) {
+      await this.revocationQueue.add(
+        'revoke-google',
+        {
+          contract_id: contract._id.toString(),
+          contractor_id: contract.contractor_id.toString(),
+          tenant_id: tenantId,
+          action: 'suspend',
+        },
+        { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+      );
+    }
+
+    if (contract.create_slack_account) {
+      await this.revocationQueue.add(
+        'revoke-slack',
+        {
+          contract_id: contract._id.toString(),
+          contractor_id: contract.contractor_id.toString(),
+          tenant_id: tenantId,
+          action: 'suspend',
+        },
+        { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+      );
+    }
+
     // Log event
     await this.eventModel.create({
       tenant_id: contract.tenant_id,
@@ -92,10 +140,14 @@ export class ContractsService {
       event_type: EventType.CONTRACT_SUSPENDED,
       actor_type: ActorType.USER,
       actor_id: new Types.ObjectId(userId),
-      metadata: { reason: dto.reason, note: dto.note ?? null },
+      metadata: { 
+        reason: dto.reason, 
+        note: dto.note ?? null,
+        revocations_queued: accessRecords.length 
+      },
     });
 
-    return { success: true, status: ContractStatus.SUSPENDED };
+    return { success: true, status: ContractStatus.SUSPENDED, revocations_queued: accessRecords.length };
   }
 
   // ─────────────────────────────────────────────────────────
@@ -214,6 +266,7 @@ export class ContractsService {
           tenant_id: tenantId,
           tenant_application_id: access.tenant_application_id.toString(),
           external_account_id: access.external_account_id,
+          action: 'delete',
         },
         { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       );
@@ -226,6 +279,7 @@ export class ContractsService {
           contract_id: contract._id.toString(),
           contractor_id: contract.contractor_id.toString(),
           tenant_id: tenantId,
+          action: 'delete',
         },
         { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       );
@@ -238,6 +292,7 @@ export class ContractsService {
           contract_id: contract._id.toString(),
           contractor_id: contract.contractor_id.toString(),
           tenant_id: tenantId,
+          action: 'delete',
         },
         { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       );

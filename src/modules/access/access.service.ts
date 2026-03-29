@@ -209,6 +209,7 @@ export class AccessService {
         tenant_id: tenantId,
         tenant_application_id: record.tenant_application_id.toString(),
         external_account_id: record.external_account_id,
+        action: record.revocation_action || 'suspend',
       },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
     );

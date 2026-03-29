@@ -73,6 +73,9 @@ export class ContractorAccess {
 
     @Prop({ type: String, default: null }) // 'system' or ObjectId string
     revoked_by: string | null;
+
+    @Prop({ type: String, enum: ['suspend', 'delete'], default: null })
+    revocation_action: string | null;
 }
 
 export const ContractorAccessSchema = SchemaFactory.createForClass(ContractorAccess);

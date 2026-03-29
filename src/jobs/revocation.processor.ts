@@ -1,4 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -16,6 +17,8 @@ import { TenantApplication, TenantApplicationDocument } from '../schemas/tenant-
     skipStalledCheck: true,
 })
 export class RevocationProcessor extends WorkerHost {
+    private readonly logger = new Logger(RevocationProcessor.name);
+
     constructor(
         @InjectModel(ContractorAccess.name)
         private accessModel: Model<ContractorAccessDocument>,
@@ -46,6 +49,7 @@ export class RevocationProcessor extends WorkerHost {
                 if (!identity) throw new Error('Contractor identity missing');
 
                 const access = await this.getAccessBySlug(tenant_id, contract_id, 'slack');
+                const action = job.data.action || access?.revocation_action || 'suspend';
                 await this.slackService.revokeUserOrNotify(tenant_id, identity.email, access?.external_account_id || undefined);
 
                 // Update ContractorAccess record
@@ -53,7 +57,9 @@ export class RevocationProcessor extends WorkerHost {
                     tenant_id,
                     contract_id,
                     'slack',
-                    ProvisioningStatus.REVOKED
+                    ProvisioningStatus.REVOKED,
+                    undefined,
+                    action
                 );
 
                 await this.eventModel.create({
@@ -95,14 +101,24 @@ export class RevocationProcessor extends WorkerHost {
                 if (!identity) throw new Error('Contractor identity missing');
 
                 const access = await this.getAccessBySlug(tenant_id, contract_id, 'google-workspace');
-                await this.googleService.deleteUser(tenant_id, identity.email, access?.external_account_id || undefined);
+                const action = job.data.action || access?.revocation_action || 'suspend';
+                
+                this.logger.log(`[RevocationProcessor] revoke-google: job_action=${job.data.action}, db_action=${access?.revocation_action}, final_action=${action}`);
+
+                if (action === 'delete') {
+                    await this.googleService.deleteUser(tenant_id, identity.email, access?.external_account_id || undefined);
+                } else {
+                    await this.googleService.suspendUser(tenant_id, identity.email, access?.external_account_id || undefined);
+                }
 
                 // Update ContractorAccess record
                 await this.updateAccessStatusBySlug(
                     tenant_id,
                     contract_id,
                     'google-workspace',
-                    ProvisioningStatus.REVOKED
+                    ProvisioningStatus.REVOKED,
+                    undefined,
+                    action
                 );
 
                 await this.eventModel.create({
@@ -112,7 +128,11 @@ export class RevocationProcessor extends WorkerHost {
                     event_type: EventType.ACCESS_REVOKED,
                     actor_type: ActorType.SYSTEM,
                     actor_id: null,
-                    metadata: { app_name: 'Google Workspace', status: 'Deleted' },
+                    metadata: { 
+                        app_name: 'Google Workspace', 
+                        status: action === 'delete' ? 'Deleted' : 'Suspended',
+                        action 
+                    },
                 });
             } catch (err: any) {
                 await this.updateAccessStatusBySlug(
@@ -140,8 +160,10 @@ export class RevocationProcessor extends WorkerHost {
         const { access_id, contract_id, contractor_id, tenant_id, app_name } = job.data;
 
         try {
+            const action = job.data.action || 'suspend';
             await this.accessModel.findByIdAndUpdate(access_id, {
                 provisioning_status: ProvisioningStatus.REVOKED,
+                revocation_action: action,
                 revoked_at: new Date(),
                 revoked_by: 'system',
             });
@@ -157,11 +179,13 @@ export class RevocationProcessor extends WorkerHost {
                 metadata: { app_name },
             });
         } catch (err: any) {
+            const action = job.data.action || 'suspend';
             await this.accessModel.findByIdAndUpdate(access_id, {
                 $inc: { revocation_attempts: 1 },
                 last_attempt_at: new Date(),
                 failure_reason: err.message,
                 provisioning_status: ProvisioningStatus.FAILED,
+                revocation_action: action,
             });
 
             await this.eventModel.create({
@@ -209,7 +233,8 @@ export class RevocationProcessor extends WorkerHost {
         contractId: string,
         appSlug: string,
         status: ProvisioningStatus,
-        failureReason?: string
+        failureReason?: string,
+        action?: string
     ) {
         try {
             const access = await this.getAccessBySlug(tenantId, contractId, appSlug);
@@ -222,6 +247,9 @@ export class RevocationProcessor extends WorkerHost {
             }
             if (failureReason) {
                 update.failure_reason = failureReason;
+            }
+            if (action) {
+                update.revocation_action = action;
             }
 
             await this.accessModel.findByIdAndUpdate(access._id, { $set: update });
