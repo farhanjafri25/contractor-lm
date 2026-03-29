@@ -97,17 +97,17 @@ export class SlackService {
     }
   }
 
-  async inviteUserOrNotify(tenantId: string, email: string, firstName: string, lastName: string) {
+  async inviteUserOrNotify(tenantId: string, email: string, firstName: string, lastName: string): Promise<string | undefined> {
     this.logger.log(`[Slack] inviteUserOrNotify called for tenant ${tenantId}, email ${email}`);
     const tenant = await this.tenantModel.findById(tenantId).lean();
     if (!tenant) {
       this.logger.error(`[Slack] Tenant ${tenantId} not found`);
-      return;
+      return undefined;
     }
     this.logger.log(`[Slack] Tenant found. BotToken=${!!tenant.slack_access_token}, UserToken=${!!tenant.slack_user_token}`);
     if (!tenant.slack_access_token) {
       this.logger.error(`[Slack] Cannot provision for tenant ${tenantId}: Missing token.`);
-      return;
+      return undefined;
     } 
 
     const client = new WebClient(tenant.slack_access_token);
@@ -116,7 +116,8 @@ export class SlackService {
       this.logger.log(`[Slack] Searching for channel to include in invitation for ${email}`);
       const channelId = await this.findDefaultChannel(client, tenant.slack_channel_id ?? undefined);
 
-      let scimSuccess = false;
+      let slackUserId: string | undefined;
+
       // --- PRIORITY 1: SCIM User Creation (Requires Enterprise Grid / SCIM enabled) ---
       this.logger.log(`[Slack] Attempting SCIM User Creation for ${email}`);
       const scimToken = tenant.slack_user_token || tenant.slack_access_token;
@@ -130,7 +131,7 @@ export class SlackService {
           },
           body: JSON.stringify({
             schemas: ["urn:scim:schemas:core:1.0"],
-            userName: email, // Changed from email prefix to full email as userName is universally secure
+            userName: email,
             name: {
               givenName: firstName || 'Contractor',
               familyName: lastName || 'User'
@@ -145,12 +146,12 @@ export class SlackService {
           })
         });
 
+        const scimData = await scimResponse.json().catch(() => ({}));
+
         if (scimResponse.ok) {
           this.logger.log(`[Slack] Successfully created user ${email} via SCIM API`);
-          scimSuccess = true;
-          return;
+          return scimData.id;
         } else {
-          const scimData = await scimResponse.json().catch(() => ({}));
           this.logger.warn(`[Slack] SCIM creation failed (${scimResponse.status}): ${JSON.stringify(scimData)}`);
         }
       } catch (scimErr) {
@@ -158,26 +159,37 @@ export class SlackService {
       }
 
       // --- PRIORITY 2: Admin Invite Fallback ---
-      if (!scimSuccess) {
-        this.logger.log(`[Slack] Attempting admin.users.invite for ${email}`);
-        try {
-          await (client.admin.users.invite as any)({
-            team_id: tenant.slack_team_id || '',
-            email: email,
-            channel_ids: channelId ? [channelId] : [],
-            custom_message: 'Welcome to the team!',
-          });
-          this.logger.log(`[Slack] Successfully invited ${email} via admin API`);
-          return;
-        } catch (adminErr) {
-          const adminErrorMsg = adminErr.data?.error || adminErr.message;
-          this.logger.warn(`[Slack] admin.users.invite fallback failed: ${adminErrorMsg}`);
+      this.logger.log(`[Slack] Attempting admin.users.invite for ${email}`);
+      try {
+        await (client.admin.users.invite as any)({
+          team_id: tenant.slack_team_id || '',
+          email: email,
+          channel_ids: channelId ? [channelId] : [],
+          custom_message: 'Welcome to the team!',
+        });
+        this.logger.log(`[Slack] Successfully invited ${email} via admin API`);
+        // Invitation sent, but we don't have ID yet. We'll do a lookup in the next step.
+      } catch (adminErr) {
+        const adminErrorMsg = adminErr.data?.error || adminErr.message;
+        this.logger.warn(`[Slack] admin.users.invite fallback failed: ${adminErrorMsg}`);
+      }
+
+      // --- ATTEMPT ID LOOKUP (If user already exists or was just invited) ---
+      try {
+        this.logger.log(`[Slack] Attempting to lookup user ID for ${email}...`);
+        const lookup = await client.users.lookupByEmail({ email });
+        if (lookup.ok && lookup.user?.id) {
+          this.logger.log(`[Slack] Found User ID: ${lookup.user.id}`);
+          return lookup.user.id;
         }
+      } catch (lookupErr) {
+        this.logger.warn(`[Slack] Lookup by email failed: ${lookupErr.data?.error || lookupErr.message}`);
       }
 
       // --- FINAL NOTIFICATION FALLBACK ---
       this.logger.log(`[Slack] Falling back to notification for ${email}`);
       await this.sendOnboardingNotification(tenant, email, firstName, lastName);
+      return undefined;
 
     } catch (e) {
       const errorMsg = e.data?.error || e.message;
@@ -252,25 +264,27 @@ export class SlackService {
     }
   }
 
-  async revokeUserOrNotify(tenantId: string, email: string) {
+  async revokeUserOrNotify(tenantId: string, email: string, externalId?: string) {
     const tenant = await this.tenantModel.findById(tenantId).lean();
     if (!tenant || !tenant.slack_access_token) return;
 
     const client = new WebClient(tenant.slack_access_token);
     
-    let slackUserId: string | undefined;
+    let slackUserId: string | undefined = externalId;
 
-    try {
-      const userLookup = await client.users.lookupByEmail({ email });
-      if (userLookup.ok && userLookup.user?.id) {
-         slackUserId = userLookup.user.id;
-      }
-    } catch (e) {
-      const errorMsg = e.data?.error || e.message;
-      if (errorMsg === 'users_not_found') {
-        this.logger.warn(`[Slack] User ${email} not found via email lookup. Skipping API removal.`);
-      } else {
-        this.logger.error(`[Slack] Revocation lookup failed: ${errorMsg}`);
+    if (!slackUserId) {
+      try {
+        const userLookup = await client.users.lookupByEmail({ email });
+        if (userLookup.ok && userLookup.user?.id) {
+           slackUserId = userLookup.user.id;
+        }
+      } catch (e) {
+        const errorMsg = e.data?.error || e.message;
+        if (errorMsg === 'users_not_found') {
+          this.logger.warn(`[Slack] User ${email} not found via email lookup. Skipping API removal.`);
+        } else {
+          this.logger.error(`[Slack] Revocation lookup failed: ${errorMsg}`);
+        }
       }
     }
 

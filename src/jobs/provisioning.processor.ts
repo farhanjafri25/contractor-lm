@@ -42,7 +42,7 @@ export class ProvisioningProcessor extends WorkerHost {
         const [firstName, ...lastNameParts] = identity.name.split(' ');
         const lastName = lastNameParts.join(' ') || 'Contractor';
         
-        await this.slackService.inviteUserOrNotify(
+        const slackUserId = await this.slackService.inviteUserOrNotify(
           job.data.tenant_id,
           identity.email,
           firstName,
@@ -54,7 +54,9 @@ export class ProvisioningProcessor extends WorkerHost {
           job.data.tenant_id,
           job.data.contract_id,
           'slack',
-          ProvisioningStatus.ACTIVE
+          ProvisioningStatus.ACTIVE,
+          undefined,
+          slackUserId
         );
 
         this.logger.log(`[Provisioning:Slack] ✅ Completed successfully for ${identity.email} (Job ${job.id})`);
@@ -98,7 +100,7 @@ export class ProvisioningProcessor extends WorkerHost {
           'google-workspace',
           ProvisioningStatus.ACTIVE,
           undefined,
-          result?.primaryEmail ?? undefined
+          result?.id || result?.primaryEmail || undefined
         );
 
         if (result) {

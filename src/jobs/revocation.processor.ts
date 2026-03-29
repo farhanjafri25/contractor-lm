@@ -45,7 +45,8 @@ export class RevocationProcessor extends WorkerHost {
                 const identity = await this.identityModel.findById(contractor_id);
                 if (!identity) throw new Error('Contractor identity missing');
 
-                await this.slackService.revokeUserOrNotify(tenant_id, identity.email);
+                const access = await this.getAccessBySlug(tenant_id, contract_id, 'slack');
+                await this.slackService.revokeUserOrNotify(tenant_id, identity.email, access?.external_account_id || undefined);
 
                 // Update ContractorAccess record
                 await this.updateAccessStatusBySlug(
@@ -93,7 +94,8 @@ export class RevocationProcessor extends WorkerHost {
                 const identity = await this.identityModel.findById(contractor_id);
                 if (!identity) throw new Error('Contractor identity missing');
 
-                await this.googleService.deleteUser(tenant_id, identity.email);
+                const access = await this.getAccessBySlug(tenant_id, contract_id, 'google-workspace');
+                await this.googleService.deleteUser(tenant_id, identity.email, access?.external_account_id || undefined);
 
                 // Update ContractorAccess record
                 await this.updateAccessStatusBySlug(
@@ -177,6 +179,31 @@ export class RevocationProcessor extends WorkerHost {
         }
     }
 
+    private async getAccessBySlug(
+        tenantId: string,
+        contractId: string,
+        appSlug: string
+    ) {
+        try {
+            const application = await this.globalApplicationModel.findOne({ slug: appSlug });
+            if (!application) return null;
+
+            const tenantApplication = await this.applicationModel.findOne({
+                tenant_id: new Types.ObjectId(tenantId),
+                application_id: application._id,
+            });
+            if (!tenantApplication) return null;
+
+            return await this.accessModel.findOne({
+                tenant_id: new Types.ObjectId(tenantId),
+                contract_id: new Types.ObjectId(contractId),
+                tenant_application_id: tenantApplication._id,
+            });
+        } catch (err) {
+            return null;
+        }
+    }
+
     private async updateAccessStatusBySlug(
         tenantId: string,
         contractId: string,
@@ -185,14 +212,8 @@ export class RevocationProcessor extends WorkerHost {
         failureReason?: string
     ) {
         try {
-            const application = await this.globalApplicationModel.findOne({ slug: appSlug });
-            if (!application) return;
-
-            const tenantApplication = await this.applicationModel.findOne({
-                tenant_id: new Types.ObjectId(tenantId),
-                application_id: application._id,
-            });
-            if (!tenantApplication) return;
+            const access = await this.getAccessBySlug(tenantId, contractId, appSlug);
+            if (!access) return;
 
             const update: Record<string, any> = { provisioning_status: status };
             if (status === ProvisioningStatus.REVOKED) {
@@ -203,15 +224,7 @@ export class RevocationProcessor extends WorkerHost {
                 update.failure_reason = failureReason;
             }
 
-            await this.accessModel.findOneAndUpdate(
-                {
-                    tenant_id: new Types.ObjectId(tenantId),
-                    contract_id: new Types.ObjectId(contractId),
-                    tenant_application_id: tenantApplication._id,
-                },
-                { $set: update },
-                { new: true }
-            );
+            await this.accessModel.findByIdAndUpdate(access._id, { $set: update });
         } catch (err) {
             // Silently fail status update within revocation loop
         }

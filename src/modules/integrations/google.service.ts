@@ -119,20 +119,31 @@ export class GoogleService {
       this.logger.log(`[Google] ✅ User provisioned successfully: primaryEmail=${res.data.primaryEmail}, id=${res.data.id}`);
       return res.data;
     } catch (e) {
+      if (e.code === 409 || e.message?.includes('already exists')) {
+        this.logger.log(`[Google] ℹ️ User ${email} already exists. Fetching existing user details...`);
+        try {
+          const existingUser = await directory.users.get({ userKey: email });
+          this.logger.log(`[Google] ✅ Existing user found: primaryEmail=${existingUser.data.primaryEmail}, id=${existingUser.data.id}`);
+          return existingUser.data;
+        } catch (getErr) {
+          this.logger.error(`[Google] ❌ Failed to fetch existing user ${email}: ${getErr.message}`);
+          throw e; // Rethrow original conflict error if get fails
+        }
+      }
       this.logger.error(`[Google] ❌ Provisioning error for ${email}: ${e.message} (code=${e.code})`);
       throw e;
     }
   }
 
-  async suspendUser(tenantId: string, email: string) {
-    this.logger.log(`[Google] suspendUser called: tenant=${tenantId}, email=${email}`);
+  async suspendUser(tenantId: string, email: string, externalId?: string) {
+    this.logger.log(`[Google] suspendUser called: tenant=${tenantId}, email=${email}, externalId=${externalId}`);
     
     const tenant = await this.tenantModel.findById(tenantId).lean();
     if (!tenant || !tenant.google_workspace_refresh_token) {
       this.logger.warn(`[Google] Tenant ${tenantId} missing or has no refresh token — skipping suspension for ${email}`);
       return null;
     }
-    this.logger.log(`[Google] Tenant found, refresh token present. Suspending ${email}...`);
+    this.logger.log(`[Google] Tenant found, refresh token present. Suspending ${externalId || email}...`);
 
     const client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -145,7 +156,7 @@ export class GoogleService {
 
     try {
       const res = await directory.users.update({
-        userKey: email,
+        userKey: externalId || email,
         requestBody: {
           suspended: true,
         }
@@ -162,15 +173,15 @@ export class GoogleService {
     }
   }
 
-  async deleteUser(tenantId: string, email: string) {
-    this.logger.log(`[Google] deleteUser called: tenant=${tenantId}, email=${email}`);
+  async deleteUser(tenantId: string, email: string, externalId?: string) {
+    this.logger.log(`[Google] deleteUser called: tenant=${tenantId}, email=${email}, externalId=${externalId}`);
     
     const tenant = await this.tenantModel.findById(tenantId).lean();
     if (!tenant || !tenant.google_workspace_refresh_token) {
       this.logger.warn(`[Google] Tenant ${tenantId} missing or has no refresh token — skipping deletion for ${email}`);
       return null;
     }
-    this.logger.log(`[Google] Tenant found, refresh token present. Deleting ${email}...`);
+    this.logger.log(`[Google] Tenant found, refresh token present. Deleting ${externalId || email}...`);
 
     const client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -183,7 +194,7 @@ export class GoogleService {
 
     try {
       const res = await directory.users.delete({
-        userKey: email,
+        userKey: externalId || email,
       });
       this.logger.log(`[Google] ✅ User ${email} deleted successfully`);
       return res.data;
