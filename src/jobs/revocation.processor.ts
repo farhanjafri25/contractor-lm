@@ -13,7 +13,7 @@ import { TenantApplication, TenantApplicationDocument } from '../schemas/tenant-
 
 @Processor('revocation', {
     stalledInterval: 300000,
-    drainDelay: 10000,
+    drainDelay: 60000,
     skipStalledCheck: true,
 })
 export class RevocationProcessor extends WorkerHost {

@@ -23,7 +23,7 @@ const REQUIRED_FIELDS = ['name', 'email', 'end_date'];
 
 @Processor('import', {
     stalledInterval: 300000,
-    drainDelay: 10000,
+    drainDelay: 60000,
     skipStalledCheck: true,
 })
 export class ImportProcessor extends WorkerHost {

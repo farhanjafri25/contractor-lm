@@ -10,7 +10,11 @@ import { GoogleService } from '../modules/integrations/google.service';
 import { SlackService } from '../modules/integrations/slack.service';
 import { Application, ApplicationDocument } from '../schemas/application.schema';
 
-@Processor('provisioning')
+@Processor('provisioning', {
+    stalledInterval: 300000,
+    drainDelay: 60000,
+    skipStalledCheck: true,
+})
 @Injectable()
 export class ProvisioningProcessor extends WorkerHost {
   private readonly logger = new Logger(ProvisioningProcessor.name);
