@@ -44,6 +44,38 @@ export class MailService {
         }
     }
 
+    async sendForgotPasswordEmail(email: string, otp: string) {
+        try {
+            const { data, error } = await this.resend.emails.send({
+                from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
+                to: process.env.OVERRIDE_EMAIL || email,
+                subject: 'Reset Your Password',
+                html: `
+          <div style="font-family: sans-serif; padding: 20px; color: #333;">
+            <h2>Password Reset Request</h2>
+            <p>You requested to reset your password. Your one-time verification code is:</p>
+            <h1 style="letter-spacing: 4px; color: #000; background: #f4f4f5; padding: 12px 24px; display: inline-block; border-radius: 8px;">
+              ${otp}
+            </h1>
+            <p>This code will expire in 2 minutes.</p>
+            <p>If you did not request a password reset, you can safely ignore this email.</p>
+          </div>
+        `,
+            });
+
+            if (error) {
+                this.logger.error(`Failed to send password reset OTP to ${email}: ${error.message}`);
+                return false;
+            }
+
+            this.logger.log(`Password reset OTP sent successfully to ${email}`);
+            return true;
+        } catch (err: any) {
+            this.logger.error(`Failed to send password reset OTP to ${email}: ${err.message}`);
+            return false;
+        }
+    }
+
     async sendInviteEmail(email: string, token: string, tenantName: string) {
         try {
             const frontendUrl = process.env.INVITE_FRONTEND_URL || 'http://localhost:3000';

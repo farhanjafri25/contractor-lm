@@ -223,4 +223,66 @@ export class AuthService {
         // Automatically log them in
         return this.login(user);
     }
+
+    // ─────────────────────────────────────────────────────────
+    // FORGOT PASSWORD — POST /auth/forgot-password
+    // ─────────────────────────────────────────────────────────
+    async forgotPassword(email: string) {
+        const emailLower = email.toLowerCase();
+        
+        // Check if user exists
+        const user = await this.userModel.findOne({ email: emailLower });
+        if (!user) {
+            // For security, don't reveal if user exists or not
+            return { message: 'If an account exists with this email, an OTP has been sent' };
+        }
+
+        // Generate 6 digit OTP
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpHash = await bcrypt.hash(otpCode, 10);
+
+        // Save/Update OTP token document
+        await this.otpModel.findOneAndUpdate(
+            { email: emailLower },
+            { otp: otpHash, createdAt: new Date() },
+            { upsert: true, new: true }
+        );
+
+        // Send Email
+        await this.mailService.sendForgotPasswordEmail(emailLower, otpCode);
+
+        return { message: 'If an account exists with this email, an OTP has been sent' };
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // RESET PASSWORD — POST /auth/reset-password
+    // ─────────────────────────────────────────────────────────
+    async resetPassword(email: string, otpCode: string, newPasswordPlain: string) {
+        const emailLower = email.toLowerCase();
+        
+        const tokenDoc = await this.otpModel.findOne({ email: emailLower });
+        if (!tokenDoc) {
+            throw new BadRequestException('OTP has expired or does not exist. Please request a new one.');
+        }
+
+        const validOtp = await bcrypt.compare(otpCode, tokenDoc.otp);
+        if (!validOtp) {
+            throw new BadRequestException('Invalid OTP code');
+        }
+
+        // OTP Validated! Hash new password and update user.
+        const user = await this.userModel.findOne({ email: emailLower });
+        if (!user) {
+            throw new BadRequestException('User not found');
+        }
+
+        const passHash = await bcrypt.hash(newPasswordPlain, 10);
+        user.password_hash = passHash;
+        await user.save();
+
+        // Delete the OTP
+        await this.otpModel.deleteOne({ _id: tokenDoc._id });
+
+        return { message: 'Password has been reset successfully' };
+    }
 }

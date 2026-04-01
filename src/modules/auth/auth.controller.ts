@@ -48,6 +48,23 @@ export class AcceptInviteDto {
     password: string;
 }
 
+class ForgotPasswordDto {
+    @IsEmail()
+    email: string;
+}
+
+class ResetPasswordDto {
+    @IsEmail()
+    email: string;
+
+    @IsString()
+    otp: string;
+
+    @IsString()
+    @MinLength(8)
+    password: string;
+}
+
 @Controller('auth')
 export class AuthController {
     constructor(private authService: AuthService) { }
@@ -81,5 +98,17 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async acceptInvite(@Body() dto: AcceptInviteDto) {
         return this.authService.acceptInvite(dto.email, dto.token, dto.password);
+    }
+
+    @Post('forgot-password')
+    @HttpCode(HttpStatus.OK)
+    async forgotPassword(@Body() dto: ForgotPasswordDto) {
+        return this.authService.forgotPassword(dto.email);
+    }
+
+    @Post('reset-password')
+    @HttpCode(HttpStatus.OK)
+    async resetPassword(@Body() dto: ResetPasswordDto) {
+        return this.authService.resetPassword(dto.email, dto.otp, dto.password);
     }
 }

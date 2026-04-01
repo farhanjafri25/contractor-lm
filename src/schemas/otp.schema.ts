@@ -8,11 +8,11 @@ export class OtpToken {
     @Prop({ type: String, required: true })
     email: string;
 
-    @Prop({ type: String, required: true })
-    name: string; // Temporarily store the desired name during signup
+    @Prop({ type: String, required: false })
+    name?: string; // Temporarily store the desired name during signup
 
-    @Prop({ type: String, required: true })
-    password_hash: string; // Temporarily store the desired password hash
+    @Prop({ type: String, required: false })
+    password_hash?: string; // Temporarily store the desired password hash
 
     @Prop({ type: String, required: true })
     otp: string; // The hashed 6-digit code
