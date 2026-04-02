@@ -16,7 +16,7 @@ import { ContractStatus } from '../../schemas/contractor-contract.schema';
 import { LifecycleEvent } from '../../schemas/lifecycle-event.schema';
 import type { LifecycleEventDocument } from '../../schemas/lifecycle-event.schema';
 import { EventType, ActorType } from '../../schemas/lifecycle-event.schema';
-import { ListAccessDto, UpdateAccessDto } from './dto/access.dto';
+import { ListAccessDto, UpdateAccessDto, SyncAccessDto } from './dto/access.dto';
 
 // Max retries before we stop auto-requeueing
 const MAX_REVOCATION_ATTEMPTS = 3;
@@ -122,7 +122,12 @@ export class AccessService {
 
     if (!contract) throw new NotFoundException('Contract not found');
 
-    // Summarise provisioning state across all apps
+    // Only show current active/pending access in the summary list
+    const filteredAccess = accessRecords.filter(
+      (r) => r.provisioning_status !== ProvisioningStatus.REVOKED,
+    );
+
+    // Summarise provisioning state across all apps (using full list for counts)
     const summary = {
       total: accessRecords.length,
       active: accessRecords.filter((r) => r.provisioning_status === ProvisioningStatus.ACTIVE).length,
@@ -131,7 +136,7 @@ export class AccessService {
       failed: accessRecords.filter((r) => r.provisioning_status === ProvisioningStatus.FAILED).length,
     };
 
-    return { contract, access: accessRecords, summary };
+    return { contract, access: filteredAccess, summary };
   }
 
   // ─────────────────────────────────────────────────────────
@@ -253,5 +258,203 @@ export class AccessService {
     });
 
     return { success: true, access_id: accessId, status: ProvisioningStatus.REVOKED };
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // SYNC ACCESS — PUT /access/contract/:contractId/sync
+  // Central source of truth for a contractor's application access
+  // ─────────────────────────────────────────────────────────
+  async syncAccess(contractId: string, tenantId: string, userId: string, dto: SyncAccessDto) {
+    const contract = await this.contractModel.findOne({
+      _id: new Types.ObjectId(contractId),
+      tenant_id: new Types.ObjectId(tenantId),
+    });
+    if (!contract) throw new NotFoundException('Contract not found');
+
+    const allAccess = await this.accessModel.find({
+      contract_id: new Types.ObjectId(contractId),
+    });
+
+    const activeAccess = allAccess.filter((a) => a.provisioning_status !== ProvisioningStatus.REVOKED);
+    const activeAppIds = activeAccess.map((a) => a.tenant_application_id.toString());
+    const requestedAppIds = dto.access_items.map((i) => i.tenant_application_id);
+
+    const created: string[] = [];
+    const revoked: string[] = [];
+    const updated: string[] = [];
+
+    // 1. REVOKE removed apps
+    for (const record of activeAccess) {
+      if (!requestedAppIds.includes(record.tenant_application_id.toString())) {
+        await this.accessModel.findByIdAndUpdate(record._id, {
+          provisioning_status: ProvisioningStatus.PENDING, // Transition state
+          revocation_attempts: 0,
+        });
+
+        await this.revocationQueue.add(
+          'revoke-access',
+          {
+            access_id: record._id.toString(),
+            contract_id: contractId,
+            contractor_id: contract.contractor_id.toString(),
+            tenant_id: tenantId,
+            tenant_application_id: record.tenant_application_id.toString(),
+            external_account_id: record.external_account_id,
+            action: 'suspend', // Default per user request
+          },
+          { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+        );
+        revoked.push(record.tenant_application_id.toString());
+      }
+    }
+
+    // 2. CREATE or REACTIVATE apps
+    for (const item of dto.access_items) {
+      if (!activeAppIds.includes(item.tenant_application_id)) {
+        // Find if we already have a record for this app (likely previously REVOKED)
+        const existingRecord = allAccess.find(
+          (a) => a.tenant_application_id.toString() === item.tenant_application_id,
+        );
+
+        if (existingRecord) {
+          // Reactivate existing record
+          await this.accessModel.findByIdAndUpdate(existingRecord._id, {
+            $set: {
+              provisioning_status: ProvisioningStatus.PENDING,
+              access_role: item.access_role || null,
+              granted_at: new Date(),
+              granted_by: new Types.ObjectId(userId),
+              revocation_attempts: 0,
+              revoked_at: null,
+              revoked_by: null,
+              failure_reason: null,
+            },
+          });
+
+          await this.provisioningQueue.add(
+            'provision-access',
+            {
+              access_id: existingRecord._id.toString(),
+              contract_id: contractId,
+              contractor_id: contract.contractor_id.toString(),
+              tenant_id: tenantId,
+              tenant_application_id: item.tenant_application_id,
+              access_role: item.access_role,
+            },
+            { attempts: 3, backoff: { type: 'exponential', delay: 3000 } },
+          );
+          created.push(item.tenant_application_id);
+        } else {
+          // Brand new creation
+          const newAccess = await this.accessModel.create({
+            contract_id: new Types.ObjectId(contractId),
+            contractor_id: contract.contractor_id,
+            tenant_id: new Types.ObjectId(tenantId),
+            tenant_application_id: new Types.ObjectId(item.tenant_application_id),
+            access_role: item.access_role || null,
+            provisioning_status: ProvisioningStatus.PENDING,
+            granted_at: new Date(),
+            granted_by: new Types.ObjectId(userId),
+          });
+
+          await this.provisioningQueue.add(
+            'provision-access',
+            {
+              access_id: newAccess._id.toString(),
+              contract_id: contractId,
+              contractor_id: contract.contractor_id.toString(),
+              tenant_id: tenantId,
+              tenant_application_id: item.tenant_application_id,
+              access_role: item.access_role,
+            },
+            { attempts: 3, backoff: { type: 'exponential', delay: 3000 } },
+          );
+          created.push(item.tenant_application_id);
+        }
+      } else {
+        // 3. UPDATE existing (Role change only as requested)
+        const record = activeAccess.find(
+          (a) => a.tenant_application_id.toString() === item.tenant_application_id,
+        );
+        if (record && record.access_role !== item.access_role) {
+          await this.accessModel.findByIdAndUpdate(record._id, {
+            $set: { access_role: item.access_role },
+          });
+          updated.push(item.tenant_application_id);
+        }
+      }
+    }
+
+    // 4. Handle Integration Flags (Google/Slack)
+    const contractUpdates: Record<string, any> = {};
+
+    if (
+      dto.create_google_account !== undefined &&
+      dto.create_google_account !== contract.create_google_account
+    ) {
+      contractUpdates.create_google_account = dto.create_google_account;
+      if (dto.create_google_account) {
+        await this.provisioningQueue.add('provision-google', {
+          tenant_id: tenantId,
+          contractor_id: contract.contractor_id.toString(),
+          contract_id: contractId,
+        });
+      } else {
+        await this.revocationQueue.add('revoke-google', {
+          contract_id: contractId,
+          contractor_id: contract.contractor_id.toString(),
+          tenant_id: tenantId,
+          action: 'suspend',
+        });
+      }
+    }
+
+    if (
+      dto.create_slack_account !== undefined &&
+      dto.create_slack_account !== contract.create_slack_account
+    ) {
+      contractUpdates.create_slack_account = dto.create_slack_account;
+      if (dto.create_slack_account) {
+        await this.provisioningQueue.add('provision-slack', {
+          tenant_id: tenantId,
+          contractor_id: contract.contractor_id.toString(),
+          contract_id: contractId,
+        });
+      } else {
+        await this.revocationQueue.add('revoke-slack', {
+          contract_id: contractId,
+          contractor_id: contract.contractor_id.toString(),
+          tenant_id: tenantId,
+          action: 'suspend',
+        });
+      }
+    }
+
+    if (Object.keys(contractUpdates).length > 0) {
+      await this.contractModel.findByIdAndUpdate(contract._id, { $set: contractUpdates });
+    }
+
+    // Audit Log
+    await this.eventModel.create({
+      tenant_id: new Types.ObjectId(tenantId),
+      contractor_id: contract.contractor_id,
+      contract_id: new Types.ObjectId(contractId),
+      event_type: EventType.ACCESS_GRANTED, // Using GRANTED as base event for sync
+      actor_type: ActorType.USER,
+      actor_id: new Types.ObjectId(userId),
+      metadata: {
+        action: 'bulk_sync',
+        created_count: created.length,
+        revoked_count: revoked.length,
+        updated_count: updated.length,
+        integrations: contractUpdates,
+      },
+    });
+
+    return {
+      success: true,
+      summary: { created: created.length, revoked: revoked.length, updated: updated.length },
+      details: { created, revoked, updated },
+    };
   }
 }

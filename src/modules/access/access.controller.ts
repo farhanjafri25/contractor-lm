@@ -11,7 +11,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AccessService } from './access.service';
-import { ListAccessDto, UpdateAccessDto } from './dto/access.dto';
+import { ListAccessDto, UpdateAccessDto, SyncAccessDto } from './dto/access.dto';
 import { JwtAuthGuard, RolesGuard, Roles } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { RequestUser } from '../../common/types';
@@ -45,6 +45,22 @@ export class AccessController {
     @Param('contractId') contractId: string,
   ) {
     return this.accessService.findByContract(contractId, user.tenantId);
+  }
+
+  /**
+   * PUT /access/contract/:contractId/sync
+   * Bulk sync application access for a contract.
+   * Compares requested apps against current and queues provision/revoke jobs.
+   */
+  @Patch('contract/:contractId/sync')
+  @Roles('admin', 'security')
+  @HttpCode(HttpStatus.OK)
+  syncAccess(
+    @CurrentUser() user: RequestUser,
+    @Param('contractId') contractId: string,
+    @Body() dto: SyncAccessDto,
+  ) {
+    return this.accessService.syncAccess(contractId, user.tenantId, user.userId, dto);
   }
 
   /**
