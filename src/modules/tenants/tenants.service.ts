@@ -41,7 +41,19 @@ export class TenantsService {
   async getProfile(tenantId: string) {
     const tenant = await this.tenantModel.findById(tenantId).lean();
     if (!tenant) throw new NotFoundException('Tenant not found');
-    return tenant;
+    
+    // Security: Do not return sensitive tokens to the frontend
+    const { 
+      slack_access_token, 
+      google_workspace_refresh_token,
+      ...safeTenant 
+    } = tenant as any;
+
+    return {
+      ...safeTenant,
+      is_slack_connected: !!slack_access_token,
+      is_google_connected: !!google_workspace_refresh_token,
+    };
   }
 
   /** PATCH /tenants/me — update mutable tenant profile fields */
@@ -51,6 +63,25 @@ export class TenantsService {
       .lean();
     if (!updated) throw new NotFoundException('Tenant not found');
     return updated;
+  }
+
+  async disconnectGoogle(tenantId: string) {
+    return this.tenantModel.findByIdAndUpdate(tenantId, {
+      $set: {
+        google_workspace_refresh_token: null,
+        google_workspace_domain: null,
+      }
+    });
+  }
+
+  async disconnectSlack(tenantId: string) {
+    return this.tenantModel.findByIdAndUpdate(tenantId, {
+      $set: {
+        slack_access_token: null,
+        slack_user_token: null,
+        slack_team_id: null,
+      }
+    });
   }
 
   // ─────────────────────────────────────────────────────────
@@ -132,6 +163,7 @@ export class TenantsService {
 
     const user = await this.userModel.create({
       tenant_id: tenantOid,
+      email: dto.email.toLowerCase(),
       role: UserRole.SPONSOR,
       is_invited: true,
       invited_by: invitedByOid,

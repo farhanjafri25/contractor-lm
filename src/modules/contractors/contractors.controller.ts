@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -14,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ContractorsService } from './contractors.service';
-import { CreateContractorDto } from './dto/create-contractor.dto';
+import { CreateContractorDto, BulkCreateContractorsDto } from './dto/create-contractor.dto';
 import { UpdateContractorDto } from './dto/update-contractor.dto';
 import { ListContractorsDto } from './dto/list-contractors.dto';
 import { JwtAuthGuard, RolesGuard, Roles } from '../../common/guards/jwt-auth.guard';
@@ -56,6 +57,14 @@ export class ContractorsController {
     return this.contractorsService.create(dto, user.tenantId, user.userId, user.role);
   }
 
+  // POST /contractors/bulk
+  @Post('bulk')
+  @Roles('admin', 'sponsor')
+  @HttpCode(HttpStatus.CREATED)
+  bulkCreate(@CurrentUser() user: RequestUser, @Body() dto: BulkCreateContractorsDto) {
+    return this.contractorsService.bulkCreate(dto.contractors, user.tenantId, user.userId, user.role);
+  }
+
   // POST /contractors/:id/contracts  (rehire)
   @Post(':id/contracts')
   @Roles('admin', 'sponsor')
@@ -83,6 +92,17 @@ export class ContractorsController {
     @Body() dto: UpdateContractorDto,
   ) {
     return this.contractorsService.update(id, user.tenantId, dto);
+  }
+
+  // DELETE /contractors/:id
+  @Delete(':id')
+  @Roles('admin')
+  @HttpCode(HttpStatus.OK)
+  remove(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+  ) {
+    return this.contractorsService.remove(id, user.tenantId, user.userId);
   }
 
   // POST /contractors/import   (CSV bulk upload)

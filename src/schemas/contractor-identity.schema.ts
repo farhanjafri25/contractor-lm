@@ -31,6 +31,15 @@ export class ContractorIdentity {
 
     @Prop({ type: Types.ObjectId, ref: 'TenantUser', required: true })
     created_by: Types.ObjectId;
+
+    @Prop({ type: Boolean, default: false })
+    is_deleted: boolean;
+
+    @Prop({ type: Date, default: null })
+    deleted_at: Date | null;
+
+    @Prop({ type: Types.ObjectId, ref: 'TenantUser', default: null })
+    deleted_by: Types.ObjectId | null;
 }
 
 export const ContractorIdentitySchema = SchemaFactory.createForClass(ContractorIdentity);

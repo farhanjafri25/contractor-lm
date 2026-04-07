@@ -56,6 +56,24 @@ export class Tenant {
     @Prop({ type: String, default: null })
     directory_provider: string | null;
 
+    @Prop({ type: String, default: null })
+    google_workspace_refresh_token: string | null;
+
+    @Prop({ type: String, default: null })
+    google_workspace_domain: string | null;
+
+    @Prop({ type: String, default: null })
+    slack_access_token: string | null;
+
+    @Prop({ type: String, default: null })
+    slack_user_token: string | null;
+
+    @Prop({ type: String, default: null })
+    slack_channel_id: string | null;
+
+    @Prop({ type: String, default: null })
+    slack_team_id: string | null;
+
     @Prop({ type: String, enum: TenantStatus, default: TenantStatus.TRIAL })
     status: TenantStatus;
 

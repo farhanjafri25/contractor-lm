@@ -18,6 +18,8 @@ import { EventsModule } from './modules/events/events.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { MailModule } from './modules/mail/mail.module';
 import { AiModule } from './modules/ai/ai.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
 import { SlackModule } from './modules/slack/slack.module';
 
 import { AppController } from './app.controller';
@@ -107,6 +109,8 @@ import { AppService } from './app.service';
     DashboardModule,
     MailModule,
     AiModule,
+    IntegrationsModule,
+    FeedbackModule,
     SlackModule,
   ],
   controllers: [AppController],

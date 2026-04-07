@@ -1,4 +1,5 @@
-import { IsOptional, IsEnum, IsString } from 'class-validator';
+import { IsOptional, IsEnum, IsString, IsArray, ValidateNested, IsBoolean } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ProvisioningStatus } from '../../../schemas/contractor-access.schema';
 
 export class ListAccessDto {
@@ -33,4 +34,28 @@ export class UpdateAccessDto {
     @IsOptional()
     @IsString()
     access_role?: string;
+}
+
+export class SyncAccessItemDto {
+    @IsString()
+    tenant_application_id: string;
+
+    @IsOptional()
+    @IsString()
+    access_role?: string;
+}
+
+export class SyncAccessDto {
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => SyncAccessItemDto)
+    access_items: SyncAccessItemDto[];
+
+    @IsOptional()
+    @IsBoolean()
+    create_google_account?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    create_slack_account?: boolean;
 }
