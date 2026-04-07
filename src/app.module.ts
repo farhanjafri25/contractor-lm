@@ -20,7 +20,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { AiModule } from './modules/ai/ai.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
-import { SlackModule } from './modules/slack/slack.module';
+import { SlackAppModule } from './modules/slack-app/slack-app.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -111,7 +111,7 @@ import { AppService } from './app.service';
     AiModule,
     IntegrationsModule,
     FeedbackModule,
-    SlackModule,
+    SlackAppModule,
   ],
   controllers: [AppController],
   providers: [AppService],

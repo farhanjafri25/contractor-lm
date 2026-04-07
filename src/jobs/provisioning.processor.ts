@@ -48,6 +48,7 @@ export class ProvisioningProcessor extends WorkerHost {
         
         const slackUserId = await this.slackService.inviteUserOrNotify(
           job.data.tenant_id,
+          job.data.contract_id,
           identity.email,
           firstName,
           lastName

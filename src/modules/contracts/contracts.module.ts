@@ -9,7 +9,7 @@ import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-ev
 import { ExpiryProcessor } from '../../jobs/expiry.processor';
 import { ReminderProcessor } from '../../jobs/reminder.processor';
 import { SponsorAction, SponsorActionSchema } from '../../schemas/sponsor-action.schema';
-import { SlackModule } from '../slack/slack.module';
+import { SlackAppModule } from '../slack-app/slack-app.module';
 
 @Module({
     imports: [
@@ -35,7 +35,7 @@ import { SlackModule } from '../slack/slack.module';
                 }
             }
         ),
-        forwardRef(() => SlackModule),
+        forwardRef(() => SlackAppModule),
     ],
     controllers: [ContractsController],
     providers: [ContractsService, ExpiryProcessor, ReminderProcessor],

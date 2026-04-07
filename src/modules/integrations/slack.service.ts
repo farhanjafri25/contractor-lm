@@ -5,6 +5,8 @@ import { Tenant, TenantDocument } from '../../schemas/tenant.schema';
 import { Application, ApplicationDocument } from '../../schemas/application.schema';
 import { TenantApplication, TenantApplicationDocument, TenantApplicationStatus } from '../../schemas/tenant-application.schema';
 import { WebClient } from '@slack/web-api';
+// Using aliased import to avoid conflicts with this service's name 'SlackService'
+import { SlackAppService as SlackBotService } from '../slack-app/slack-app.service';
 
 @Injectable()
 export class SlackService {
@@ -14,28 +16,34 @@ export class SlackService {
     @InjectModel(Tenant.name) private tenantModel: Model<TenantDocument>,
     @InjectModel(Application.name) private applicationModel: Model<ApplicationDocument>,
     @InjectModel(TenantApplication.name) private tenantApplicationModel: Model<TenantApplicationDocument>,
+    private readonly slackBotService: SlackBotService,
   ) {}
 
-  getAuthorizationUrl(tenantId: string): string {
+  getAuthorizationUrl(tenantId: string, botOnly: boolean = false): string {
     const clientId = process.env.SLACK_CLIENT_ID || '';
     const redirectUri = process.env.SLACK_REDIRECT_URI || '';
     
+    // Scopes combined from Integration (Users/SCIM logic) & Bot (interactive messages logic)
     const botScopes = [
       'chat:write',
       'chat:write.public',
       'channels:read',
       'groups:read',
       'im:read',
+      'im:write',
       'mpim:read',
       'users:read',
-      'users:read.email'
+      'users:read.email',
+      'commands'
     ].join(',');
 
-    const userScopes = [
-      'admin'
-    ].join(',');
+    const userScopes = botOnly ? '' : ['admin'].join(',');
 
-    return `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=${botScopes}&user_scope=${userScopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${tenantId}`;
+    let url = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=${botScopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${tenantId}`;
+    if (userScopes) {
+      url += `&user_scope=${userScopes}`;
+    }
+    return url;
   }
 
   async handleCallback(code: string, tenantId: string) {
@@ -53,13 +61,17 @@ export class SlackService {
         const userToken = result.authed_user?.access_token;
         const teamId = result.team?.id || null;
         
+        const updateData: any = { 
+          slack_access_token: botToken,
+          slack_team_id: teamId,
+        };
+        if (userToken) {
+          updateData.slack_user_token = userToken;
+        }
+
         await this.tenantModel.findByIdAndUpdate(
           new Types.ObjectId(tenantId),
-          { 
-            slack_access_token: botToken,
-            slack_user_token: userToken,
-            slack_team_id: teamId,
-          },
+          updateData,
           { new: true }
         );
 
@@ -91,13 +103,13 @@ export class SlackService {
       } else {
         throw new Error(result.error);
       }
-    } catch (e) {
+    } catch (e: any) {
       this.logger.error(`Slack OAuth callback failed: ${e.message}`);
       throw new BadRequestException('Failed to exchange authorization code for Slack token');
     }
   }
 
-  async inviteUserOrNotify(tenantId: string, email: string, firstName: string, lastName: string): Promise<string | undefined> {
+  async inviteUserOrNotify(tenantId: string, contractId: string, email: string, firstName: string, lastName: string): Promise<string | undefined> {
     this.logger.log(`[Slack] inviteUserOrNotify called for tenant ${tenantId}, email ${email}`);
     const tenant = await this.tenantModel.findById(tenantId).lean();
     if (!tenant) {
@@ -113,11 +125,6 @@ export class SlackService {
     const client = new WebClient(tenant.slack_access_token);
 
     try {
-      this.logger.log(`[Slack] Searching for channel to include in invitation for ${email}`);
-      const channelId = await this.findDefaultChannel(client, tenant.slack_channel_id ?? undefined);
-
-      let slackUserId: string | undefined;
-
       // --- PRIORITY 1: SCIM User Creation (Requires Enterprise Grid / SCIM enabled) ---
       this.logger.log(`[Slack] Attempting SCIM User Creation for ${email}`);
       const scimToken = tenant.slack_user_token || tenant.slack_access_token;
@@ -154,22 +161,25 @@ export class SlackService {
         } else {
           this.logger.warn(`[Slack] SCIM creation failed (${scimResponse.status}): ${JSON.stringify(scimData)}`);
         }
-      } catch (scimErr) {
+      } catch (scimErr: any) {
         this.logger.error(`[Slack] SCIM API request failed: ${scimErr.message}`);
       }
 
       // --- PRIORITY 2: Admin Invite Fallback ---
       this.logger.log(`[Slack] Attempting admin.users.invite for ${email}`);
       try {
+        const channels = await client.conversations.list({ types: 'public_channel', limit: 1 });
+        const fallbackChannelId = channels.channels?.[0]?.id;
+
         await (client.admin.users.invite as any)({
           team_id: tenant.slack_team_id || '',
           email: email,
-          channel_ids: channelId ? [channelId] : [],
+          channel_ids: fallbackChannelId ? [fallbackChannelId] : [],
           custom_message: 'Welcome to the team!',
         });
         this.logger.log(`[Slack] Successfully invited ${email} via admin API`);
         // Invitation sent, but we don't have ID yet. We'll do a lookup in the next step.
-      } catch (adminErr) {
+      } catch (adminErr: any) {
         const adminErrorMsg = adminErr.data?.error || adminErr.message;
         this.logger.warn(`[Slack] admin.users.invite fallback failed: ${adminErrorMsg}`);
       }
@@ -182,94 +192,27 @@ export class SlackService {
           this.logger.log(`[Slack] Found User ID: ${lookup.user.id}`);
           return lookup.user.id;
         }
-      } catch (lookupErr) {
+      } catch (lookupErr: any) {
         this.logger.warn(`[Slack] Lookup by email failed: ${lookupErr.data?.error || lookupErr.message}`);
       }
 
       // --- FINAL NOTIFICATION FALLBACK ---
       this.logger.log(`[Slack] Falling back to notification for ${email}`);
-      await this.sendOnboardingNotification(tenant, email, firstName, lastName);
+      await this.slackBotService.sendOnboardingNotification(tenantId, contractId, firstName, lastName, email);
       return undefined;
 
-    } catch (e) {
+    } catch (e: any) {
       const errorMsg = e.data?.error || e.message;
       this.logger.error(`[Slack] Unexpected provisioning error for ${email}: ${errorMsg}`, e.data);
       throw e;
     }
   }
 
-  private async findDefaultChannel(client: WebClient, configuredId?: string): Promise<string | undefined> {
-    if (configuredId) return configuredId;
-
-    try {
-      const channels = await client.conversations.list({ 
-        types: 'public_channel', 
-        limit: 100,
-        exclude_archived: true
-      });
-      
-      const target = channels.channels?.find(c => 
-        ['general', 'it-admin', 'onboarding', 'hr'].includes(c.name || '')
-      );
-      
-      return target?.id || channels.channels?.[0]?.id;
-    } catch (e) {
-      this.logger.error(`[Slack] Failed to list channels: ${e.message}`);
-      return undefined;
-    }
-  }
-
-  private async sendOnboardingNotification(tenant: any, email: string, firstName: string, lastName: string) {
-    const client = new WebClient(tenant.slack_access_token);
-    const channelId = await this.findDefaultChannel(client, tenant.slack_channel_id ?? undefined);
-
-    if (!channelId) {
-      this.logger.error(`[Slack] No channel found for notification for tenant ${tenant._id}`);
-      return;
-    }
-
-    try {
-      await client.chat.postMessage({
-        channel: channelId,
-        text: `New Contractor Onboarding: ${firstName} ${lastName}`,
-        blocks: [
-          {
-            type: 'header',
-            text: {
-              type: 'plain_text',
-              text: '🚀 New Contractor Onboarding',
-            },
-          },
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `*Name:* ${firstName} ${lastName}\n*Email:* ${email}\n*Role:* Contractor`,
-            },
-          },
-          {
-            type: 'context',
-            elements: [
-              {
-                type: 'mrkdwn',
-                text: '⚠️ *Manual Action Required:* Automated Slack invitation is restricted to Enterprise Grid. Please invite this user manually.',
-              },
-            ],
-          },
-        ],
-      });
-      this.logger.log(`[Slack] Posted onboarding notification to ${channelId}`);
-    } catch (e) {
-      this.logger.error(`[Slack] Failed to post message to ${channelId}: ${e.message}`);
-    }
-  }
-
-  async revokeUserOrNotify(tenantId: string, email: string, externalId?: string) {
+  async revokeUserOrNotify(tenantId: string, contractId: string | undefined, email: string, externalId?: string) {
     const tenant = await this.tenantModel.findById(tenantId).lean();
     if (!tenant || !tenant.slack_access_token) return;
 
     const client = new WebClient(tenant.slack_access_token);
-    
     let slackUserId: string | undefined = externalId;
 
     if (!slackUserId) {
@@ -278,7 +221,7 @@ export class SlackService {
         if (userLookup.ok && userLookup.user?.id) {
            slackUserId = userLookup.user.id;
         }
-      } catch (e) {
+      } catch (e: any) {
         const errorMsg = e.data?.error || e.message;
         if (errorMsg === 'users_not_found') {
           this.logger.warn(`[Slack] User ${email} not found via email lookup. Skipping API removal.`);
@@ -309,7 +252,7 @@ export class SlackService {
           const scimData = await scimDeleteResponse.json().catch(() => ({}));
           this.logger.warn(`[Slack] SCIM deactivation failed for ${email} (${scimDeleteResponse.status}): ${JSON.stringify(scimData)}`);
         }
-      } catch (scimErr) {
+      } catch (scimErr: any) {
         this.logger.error(`[Slack] SCIM Deactivation failed for ${email}: ${scimErr.message}`);
       }
 
@@ -322,42 +265,14 @@ export class SlackService {
           });
           this.logger.log(`[Slack] Successfully removed user ${email} via admin API`);
           return;
-        } catch (adminErr) {
+        } catch (adminErr: any) {
           this.logger.warn(`[Slack] admin.users.remove failed for ${email}: ${adminErr.data?.error || adminErr.message}`);
         }
       }
     }
 
-    // --- PRIORITY 3: Manual Notification ---
-    // Execution only reaches here if APIs failed or if slackUserId was not found
-    const channelId = await this.findDefaultChannel(client, tenant.slack_channel_id ?? undefined);
-    
-    if (channelId) {
-      try {
-        await client.chat.postMessage({
-          channel: channelId,
-          text: `🚨 *Access Revocation Required*\nContract for *${email}* has ended. Please manually verify and deactivate their Slack account.`,
-          blocks: [
-            {
-              type: 'header',
-              text: {
-                type: 'plain_text',
-                text: '🚨 Access Revocation Required',
-              },
-            },
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `The contract for *${email}* has ended, but automated Slack deactivation natively failed or the user wasn't found under that exact email. Please manually verify and deactivate them in your Slack workspace.`,
-              },
-            },
-          ]
-        });
-        this.logger.log(`[Slack] Sent manual deactivation notice to ${channelId} for ${email}`);
-      } catch (postErr) {
-        this.logger.error(`[Slack] Failed to post revocation notice: ${postErr.message}`);
-      }
-    }
+    // --- PRIORITY 3: Manual Notification via Bot ---
+    this.logger.log(`[Slack] Falling back to revocation notification for ${email}`);
+    await this.slackBotService.sendRevocationNotification(tenantId, contractId, email);
   }
 }

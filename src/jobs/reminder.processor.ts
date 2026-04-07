@@ -4,7 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ContractorContract, ContractorContractDocument, ContractStatus } from '../schemas/contractor-contract.schema';
 import { SponsorAction, SponsorActionDocument, SponsorActionStatus } from '../schemas/sponsor-action.schema';
-import { SlackService } from '../modules/slack/slack.service';
+import { SlackAppService } from '../modules/slack-app/slack-app.service';
 
 @Injectable()
 export class ReminderProcessor {
@@ -15,7 +15,7 @@ export class ReminderProcessor {
         private contractModel: Model<ContractorContractDocument>,
         @InjectModel(SponsorAction.name)
         private sponsorActionModel: Model<SponsorActionDocument>,
-        private slackService: SlackService,
+        private slackService: SlackAppService,
     ) { }
 
     // Changed to EVERY_MINUTE for easy local testing!
