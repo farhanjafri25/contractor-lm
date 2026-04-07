@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BullModule } from '@nestjs/bullmq';
 import { ContractsController } from './contracts.controller';
@@ -7,6 +7,9 @@ import { ContractorContract, ContractorContractSchema } from '../../schemas/cont
 import { ContractorAccess, ContractorAccessSchema } from '../../schemas/contractor-access.schema';
 import { LifecycleEvent, LifecycleEventSchema } from '../../schemas/lifecycle-event.schema';
 import { ExpiryProcessor } from '../../jobs/expiry.processor';
+import { ReminderProcessor } from '../../jobs/reminder.processor';
+import { SponsorAction, SponsorActionSchema } from '../../schemas/sponsor-action.schema';
+import { SlackAppModule } from '../slack-app/slack-app.module';
 
 @Module({
     imports: [
@@ -14,6 +17,7 @@ import { ExpiryProcessor } from '../../jobs/expiry.processor';
             { name: ContractorContract.name, schema: ContractorContractSchema },
             { name: ContractorAccess.name, schema: ContractorAccessSchema },
             { name: LifecycleEvent.name, schema: LifecycleEventSchema },
+            { name: SponsorAction.name, schema: SponsorActionSchema },
         ]),
         BullModule.registerQueue(
             { 
@@ -31,9 +35,10 @@ import { ExpiryProcessor } from '../../jobs/expiry.processor';
                 }
             }
         ),
+        forwardRef(() => SlackAppModule),
     ],
     controllers: [ContractsController],
-    providers: [ContractsService, ExpiryProcessor],
+    providers: [ContractsService, ExpiryProcessor, ReminderProcessor],
     exports: [ContractsService], // exported so SponsorModule can inject it
 })
 export class ContractsModule { }

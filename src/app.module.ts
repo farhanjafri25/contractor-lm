@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CommonModule } from './common/common.module';
 import configuration from './config/configuration';
 
 import { AuthModule } from './modules/auth/auth.module';
@@ -19,6 +20,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { AiModule } from './modules/ai/ai.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
+import { SlackAppModule } from './modules/slack-app/slack-app.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -95,6 +97,7 @@ import { AppService } from './app.service';
     ScheduleModule.forRoot(),
 
     // Feature modules
+    CommonModule,
     AuthModule,
     TenantsModule,
     ApplicationsModule,
@@ -108,6 +111,7 @@ import { AppService } from './app.service';
     AiModule,
     IntegrationsModule,
     FeedbackModule,
+    SlackAppModule,
   ],
   controllers: [AppController],
   providers: [AppService],

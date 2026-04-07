@@ -50,7 +50,7 @@ export class RevocationProcessor extends WorkerHost {
 
                 const access = await this.getAccessBySlug(tenant_id, contract_id, 'slack');
                 const action = job.data.action || access?.revocation_action || 'suspend';
-                await this.slackService.revokeUserOrNotify(tenant_id, identity.email, access?.external_account_id || undefined);
+                await this.slackService.revokeUserOrNotify(tenant_id, contract_id, identity.email, access?.external_account_id || undefined);
 
                 // Update ContractorAccess record
                 await this.updateAccessStatusBySlug(

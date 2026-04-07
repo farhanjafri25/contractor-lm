@@ -12,8 +12,9 @@ export class SlackController {
   @Get('auth')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  getAuthUrl(@CurrentUser() user: RequestUser, @Res() res: Response) {
-    const url = this.slackService.getAuthorizationUrl(user.tenantId);
+  getAuthUrl(@CurrentUser() user: RequestUser, @Res() res: Response, @Query('botOnly') botOnly?: string) {
+    const isBotOnly = botOnly === 'true';
+    const url = this.slackService.getAuthorizationUrl(user.tenantId, isBotOnly);
     return res.json({ url });
   }
 

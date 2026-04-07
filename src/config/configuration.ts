@@ -30,6 +30,12 @@ export default () => ({
 
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3001',
 
+  slack: {
+    clientId: process.env.SLACK_CLIENT_ID ?? '',
+    clientSecret: process.env.SLACK_CLIENT_SECRET ?? '',
+    redirectUri: process.env.SLACK_REDIRECT_URI ?? '',
+  },
+
   mistral: {
     apiKey: process.env.MISTRAL_API_KEY ?? '',
     chatModel: process.env.MISTRAL_CHAT_MODEL ?? 'mistral-large-latest',
