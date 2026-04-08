@@ -21,11 +21,26 @@ export class AuthService {
         private mailService: MailService,
     ) { }
 
+    private readonly personalDomains = [
+        'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
+        'aol.com', 'icloud.com', 'protonmail.com', 'me.com',
+        'msn.com', 'live.com', 'ymail.com', 'rediffmail.com', 'gmx.com',
+    ];
+
+    private isPersonalEmail(email: string): boolean {
+        const domain = email.toLowerCase().split('@')[1];
+        return this.personalDomains.includes(domain);
+    }
+
     // ─────────────────────────────────────────────────────────
     // SIGNUP — POST /auth/signup
     // ─────────────────────────────────────────────────────────
     async signup(email: string, name: string, passwordPlain: string) {
         const emailLower = email.toLowerCase();
+
+        if (this.isPersonalEmail(emailLower)) {
+            throw new BadRequestException('Personal emails are not allowed, please use your work email');
+        }
         
         // Check if user already exists
         const existingUser = await this.userModel.findOne({ email: emailLower });
@@ -134,8 +149,14 @@ export class AuthService {
     // LOGIN — POST /auth/login
     // ─────────────────────────────────────────────────────────
     async validateUser(email: string, password: string) {
+        const emailLower = email.toLowerCase();
+
+        if (this.isPersonalEmail(emailLower)) {
+            throw new UnauthorizedException('Personal emails are not allowed, please use your work email');
+        }
+
         const user = await this.userModel.findOne({
-            email: email.toLowerCase(),
+            email: emailLower,
         });
         
         if (!user || !user.password_hash) throw new UnauthorizedException('Invalid credentials');
