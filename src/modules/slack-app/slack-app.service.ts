@@ -333,7 +333,7 @@ export class SlackAppService {
       });
       
       const target = channels.channels?.find(c => 
-        ['general', 'it-admin', 'onboarding', 'hr'].includes(c.name || '')
+        ['it-admin', 'onboarding', 'hr'].includes(c.name || '')
       );
       
       return target?.id || undefined;
