@@ -327,7 +327,7 @@ export class SlackAppService {
 
     try {
       const channels = await client.conversations.list({ 
-        types: 'public_channel', 
+        types: 'public_channel,private_channel', 
         limit: 100,
         exclude_archived: true
       });
