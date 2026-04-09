@@ -322,7 +322,7 @@ export class SlackAppService {
     return undefined;
   }
 
-  private async findDefaultChannel(client: WebClient, configuredId?: string): Promise<string | undefined> {
+  async findDefaultChannel(client: WebClient, configuredId?: string): Promise<string | undefined> {
     if (configuredId) return configuredId;
 
     try {

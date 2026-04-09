@@ -166,18 +166,20 @@ export class SlackService {
       }
 
       // --- PRIORITY 2: Admin Invite Fallback ---
+      let adminInviteSuccess = false;
       this.logger.log(`[Slack] Attempting admin.users.invite for ${email}`);
       try {
-        const channels = await client.conversations.list({ types: 'public_channel', limit: 1 });
-        const fallbackChannelId = channels.channels?.[0]?.id;
+        const targetChannelId = await this.slackBotService.findDefaultChannel(client, tenant.slack_channel_id ?? undefined);
+        const channelIds = targetChannelId ? [targetChannelId] : [];
 
         await (client.admin.users.invite as any)({
           team_id: tenant.slack_team_id || '',
           email: email,
-          channel_ids: fallbackChannelId ? [fallbackChannelId] : [],
+          channel_ids: channelIds,
           custom_message: 'Welcome to the team!',
         });
         this.logger.log(`[Slack] Successfully invited ${email} via admin API`);
+        adminInviteSuccess = true;
         // Invitation sent, but we don't have ID yet. We'll do a lookup in the next step.
       } catch (adminErr: any) {
         const adminErrorMsg = adminErr.data?.error || adminErr.message;
@@ -197,6 +199,11 @@ export class SlackService {
       }
 
       // --- FINAL NOTIFICATION FALLBACK ---
+      if (adminInviteSuccess) {
+        this.logger.log(`[Slack] User ${email} was successfully invited but lookup failed. Skipping final notification.`);
+        return undefined;
+      }
+
       this.logger.log(`[Slack] Falling back to notification for ${email}`);
       await this.slackBotService.sendOnboardingNotification(tenantId, contractId, firstName, lastName, email);
       return undefined;
