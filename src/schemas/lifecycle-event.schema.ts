@@ -33,6 +33,9 @@ export enum EventType {
     EXTENSION_REQUEST_SUBMITTED = 'extension.request_submitted',
     EXTENSION_REQUEST_APPROVED = 'extension.request_approved',
     EXTENSION_REQUEST_REJECTED = 'extension.request_rejected',
+    TERMINATION_REQUEST_SUBMITTED = 'termination.request_submitted',
+    TERMINATION_REQUEST_APPROVED = 'termination.request_approved',
+    TERMINATION_REQUEST_REJECTED = 'termination.request_rejected',
 }
 
 export enum ActorType {

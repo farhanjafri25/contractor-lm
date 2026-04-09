@@ -158,12 +158,19 @@ export class SponsorService {
       response_deadline: responseDeadline,
     });
 
+    let submitEventType = EventType.EXTENSION_REQUEST_SUBMITTED;
+    if (dto.action_type === SponsorActionType.TERMINATE) {
+      submitEventType = EventType.TERMINATION_REQUEST_SUBMITTED;
+    } else if (dto.action_type === SponsorActionType.ONBOARD) {
+      submitEventType = EventType.ONBOARDING_REQUESTED;
+    }
+
     // Both EXTEND and TERMINATE now go through admin approval
     await this.eventModel.create({
       tenant_id: tenantOid,
       contractor_id: contract.contractor_id,
       contract_id: contractOid,
-      event_type: EventType.EXTENSION_REQUEST_SUBMITTED,
+      event_type: submitEventType,
       actor_type: ActorType.SPONSOR,
       actor_id: sponsorOid,
       metadata: {
@@ -247,9 +254,14 @@ export class SponsorService {
     const contract = await this.contractModel.findById(action.contract_id);
 
     // For ONBOARD actions, the actual success event is logged inside `approveOnboarding`, but we'll log the review decision here too.
-    const _eventType = action.action_type === SponsorActionType.EXTEND 
-      ? (isApproved ? EventType.EXTENSION_REQUEST_APPROVED : EventType.EXTENSION_REQUEST_REJECTED)
-      : (isApproved ? EventType.CONTRACT_REACTIVATED : EventType.EXTENSION_REQUEST_REJECTED); // we'll use reactivated/rejected as placeholders if we don't have onboard specific ones
+    let _eventType: EventType;
+    if (action.action_type === SponsorActionType.EXTEND) {
+      _eventType = isApproved ? EventType.EXTENSION_REQUEST_APPROVED : EventType.EXTENSION_REQUEST_REJECTED;
+    } else if (action.action_type === SponsorActionType.TERMINATE) {
+      _eventType = isApproved ? EventType.TERMINATION_REQUEST_APPROVED : EventType.TERMINATION_REQUEST_REJECTED;
+    } else {
+      _eventType = isApproved ? EventType.CONTRACTOR_ONBOARDED : EventType.EXTENSION_REQUEST_REJECTED;
+    }
 
     await this.eventModel.create({
       tenant_id: action.tenant_id,
