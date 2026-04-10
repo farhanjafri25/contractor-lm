@@ -8,6 +8,8 @@ export enum SponsorActionType {
     EXTEND = 'extend',
     TERMINATE = 'terminate',
     NO_RESPONSE = 'no_response',
+    REACTIVATE = 'reactivate',
+    ACCESS_CHANGE = 'access_change',
 }
 
 export enum SponsorActionStatus {

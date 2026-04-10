@@ -36,6 +36,12 @@ export enum EventType {
     TERMINATION_REQUEST_SUBMITTED = 'termination.request_submitted',
     TERMINATION_REQUEST_APPROVED = 'termination.request_approved',
     TERMINATION_REQUEST_REJECTED = 'termination.request_rejected',
+    REACTIVATION_REQUEST_SUBMITTED = 'reactivation.request_submitted',
+    REACTIVATION_REQUEST_APPROVED = 'reactivation.request_approved',
+    REACTIVATION_REQUEST_REJECTED = 'reactivation.request_rejected',
+    ACCESS_CHANGE_REQUEST_SUBMITTED = 'access.request_submitted',
+    ACCESS_CHANGE_REQUEST_APPROVED = 'access.request_approved',
+    ACCESS_CHANGE_REQUEST_REJECTED = 'access.request_rejected',
 }
 
 export enum ActorType {

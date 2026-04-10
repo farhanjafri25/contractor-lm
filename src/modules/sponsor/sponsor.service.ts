@@ -163,6 +163,10 @@ export class SponsorService {
       submitEventType = EventType.TERMINATION_REQUEST_SUBMITTED;
     } else if (dto.action_type === SponsorActionType.ONBOARD) {
       submitEventType = EventType.ONBOARDING_REQUESTED;
+    } else if (dto.action_type === SponsorActionType.REACTIVATE) {
+      submitEventType = EventType.REACTIVATION_REQUEST_SUBMITTED;
+    } else if (dto.action_type === SponsorActionType.ACCESS_CHANGE) {
+      submitEventType = EventType.ACCESS_CHANGE_REQUEST_SUBMITTED;
     }
 
     // Both EXTEND and TERMINATE now go through admin approval
@@ -201,8 +205,15 @@ export class SponsorService {
     });
     if (!action) throw new NotFoundException('Pending action not found');
 
-    // Only extension, terminate, and onboard requests go through admin review
-    if (![SponsorActionType.EXTEND, SponsorActionType.TERMINATE, SponsorActionType.ONBOARD].includes(action.action_type as SponsorActionType)) {
+    // Only extension, terminate, reactivate, access_change, and onboard requests go through admin review
+    const allowedReviewTypes = [
+      SponsorActionType.EXTEND,
+      SponsorActionType.TERMINATE,
+      SponsorActionType.ONBOARD,
+      SponsorActionType.REACTIVATE,
+      SponsorActionType.ACCESS_CHANGE,
+    ];
+    if (!allowedReviewTypes.includes(action.action_type as SponsorActionType)) {
       throw new BadRequestException('This action type does not require admin review');
     }
 
@@ -248,6 +259,16 @@ export class SponsorService {
         reviewerUserId,
         action._id.toString(),
       );
+    } else if (isApproved && action.action_type === SponsorActionType.REACTIVATE) {
+      await this.contractsService.reactivate(
+        action.contract_id.toString(),
+        tenantId,
+        reviewerUserId,
+        { note: dto.review_note ?? undefined },
+      );
+    } else if (isApproved && action.action_type === SponsorActionType.ACCESS_CHANGE) {
+      // Access changes are manually granted via the UI, no strict auto-apply required, 
+      // but it serves as an approval audit point in the life cycle
     }
 
     // Fetch the contract for the lifecycle event
@@ -259,6 +280,10 @@ export class SponsorService {
       _eventType = isApproved ? EventType.EXTENSION_REQUEST_APPROVED : EventType.EXTENSION_REQUEST_REJECTED;
     } else if (action.action_type === SponsorActionType.TERMINATE) {
       _eventType = isApproved ? EventType.TERMINATION_REQUEST_APPROVED : EventType.TERMINATION_REQUEST_REJECTED;
+    } else if (action.action_type === SponsorActionType.REACTIVATE) {
+      _eventType = isApproved ? EventType.REACTIVATION_REQUEST_APPROVED : EventType.REACTIVATION_REQUEST_REJECTED;
+    } else if (action.action_type === SponsorActionType.ACCESS_CHANGE) {
+      _eventType = isApproved ? EventType.ACCESS_CHANGE_REQUEST_APPROVED : EventType.ACCESS_CHANGE_REQUEST_REJECTED;
     } else {
       _eventType = isApproved ? EventType.CONTRACTOR_ONBOARDED : EventType.EXTENSION_REQUEST_REJECTED;
     }
